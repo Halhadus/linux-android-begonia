@@ -26,7 +26,13 @@
 
 #include <linux/vmalloc.h>
 #include "ion_profile.h"
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 #include <linux/debugfs.h>
+#endif
+#if IS_ENABLED(CONFIG_PROC_FS)
+#include <linux/proc_fs.h>
+#endif
+#include <linux/seq_file.h>
 #include "ion_priv.h"
 #include "ion_drv_priv.h"
 #include "mtk/mtk_ion.h"
@@ -59,6 +65,13 @@
 #define DEFAULT_PAGE_SIZE 0x1000
 #define PAGE_ORDER 12
 
+#define ION_CACHEOPS_IS_WRITE(type)			\
+	((type) == ION_CACHE_CLEAN_BY_RANGE ||		\
+	 (type) == ION_CACHE_CLEAN_BY_RANGE_USE_PA ||	\
+	 (type) == ION_CACHE_CLEAN_ALL ||		\
+	 (type) == ION_CACHE_FLUSH_BY_RANGE ||		\
+	 (type) == ION_CACHE_FLUSH_BY_RANGE_USE_PA ||	\
+	 (type) == ION_CACHE_FLUSH_ALL)
 struct ion_device *g_ion_device;
 EXPORT_SYMBOL(g_ion_device);
 
@@ -170,6 +183,69 @@ static int __ion_is_kernel_va(unsigned long va, size_t size)
 	return ret;
 }
 
+#ifdef CONFIG_MTK_IOMMU
+
+/**
+ * ion_get_vaddr_framevec() - map virtual addresses to pfns
+ * refer to vb2_create_framevec()
+ * @start:	Virtual user address where we start mapping
+ * @length:	Length of a range to map
+ * @write:	Should we map for writing into the area
+ *
+ * This function allocates and fills in a vector with pfns corresponding to
+ * virtual address range passed in arguments. If pfns have corresponding pages,
+ * page references are also grabbed to pin pages in memory. The function
+ * returns pointer to the vector on success and error pointer in case of
+ * failure. Returned vector needs to be freed via vb2_destroy_pfnvec().
+ */
+static struct frame_vector *
+ion_get_vaddr_framevec(unsigned long start, unsigned long length, bool write)
+{
+	int ret = 0;
+	unsigned long first, last, nr;
+	struct frame_vector *vec;
+	unsigned int flags = FOLL_FORCE;
+
+	if (write)
+		flags |= FOLL_WRITE;
+
+	first = start >> PAGE_SHIFT;
+	last = (start + length - 1) >> PAGE_SHIFT;
+	nr = last - first + 1;
+	vec = frame_vector_create(nr);
+	if (!vec)
+		return ERR_PTR(-ENOMEM);
+	ret = get_vaddr_frames(start & PAGE_MASK, nr, flags, vec);
+	if (ret < 0)
+		goto out_destroy;
+	/* We accept only complete set of PFNs */
+	if (ret != nr) {
+		ret = -EFAULT;
+		goto out_release;
+	}
+	return vec;
+out_release:
+	put_vaddr_frames(vec);
+out_destroy:
+	frame_vector_destroy(vec);
+	return ERR_PTR(ret);
+}
+
+/**
+ * ion_put_vaddr_framevec() - release vector of mapped pfns
+ * refer to vb2_destroy_framevec()
+ * @vec:	vector of pfns / pages to release
+ *
+ * This releases references to all pages in the vector @vec (if corresponding
+ * pfns are backed by pages) and frees the passed vector.
+ */
+void ion_put_vaddr_framevec(struct frame_vector *vec)
+{
+	put_vaddr_frames(vec);
+	frame_vector_destroy(vec);
+}
+#endif
+
 /* user va check
  * @return 0 : invalid va
  * @return 1 : valid user va
@@ -202,8 +278,19 @@ static int __cache_sync_by_range(struct ion_client *client,
 	int ret = 0;
 	char ion_name[100];
 	int is_user_addr;
+#ifdef CONFIG_MTK_IOMMU
+	struct frame_vector *vec = NULL;
+#endif
 
 	is_user_addr = __ion_is_user_va(start, size);
+#ifdef CONFIG_MTK_IOMMU
+	if (is_user_addr) {
+		vec = ion_get_vaddr_framevec(start, size,
+					     ION_CACHEOPS_IS_WRITE(sync_type));
+		if (IS_ERR(vec))
+			is_user_addr = 0;
+	}
+#endif
 	ret = is_user_addr || __ion_is_kernel_va(start, size);
 
 	if (!ret) {
@@ -255,6 +342,10 @@ static int __cache_sync_by_range(struct ion_client *client,
 
 	__ion_cache_mmp_end(sync_type, size);
 
+#ifdef CONFIG_MTK_IOMMU
+	if (is_user_addr)
+		ion_put_vaddr_framevec(vec);
+#endif
 	return 0;
 }
 
@@ -368,7 +459,9 @@ static long ion_sys_cache_sync(struct ion_client *client,
 	int ion_need_unmap_flag = 0;
 	int ret = 0;
 	unsigned long kernel_va = 0;
-	unsigned int kernel_size = 0;
+	unsigned long kernel_size = 0;
+	struct sg_table *table;
+	struct ion_heap *heap = NULL;
 
 	/* Get kernel handle
 	 * For cache sync all cases, some users
@@ -387,7 +480,6 @@ static long ion_sys_cache_sync(struct ion_client *client,
 	}
 
 	buffer = kernel_handle->buffer;
-	sync_va = (unsigned long)param->va;
 	sync_size = param->size;
 
 	switch (sync_type) {
@@ -403,11 +495,13 @@ static long ion_sys_cache_sync(struct ion_client *client,
 	case ION_CACHE_INVALID_ALL:
 	case ION_CACHE_FLUSH_ALL:
 #endif
+		sync_va = (unsigned long)param->va;
+
 		if (sync_size == 0 || sync_va == 0) {
 			/* whole buffer cache sync
 			 * get sync_va and sync_size here
 			 */
-			sync_size = (unsigned int)buffer->size;
+			sync_size = buffer->size;
 
 			if (buffer->kmap_cnt != 0) {
 				sync_va = (unsigned long)buffer->vaddr;
@@ -444,9 +538,25 @@ static long ion_sys_cache_sync(struct ion_client *client,
 	case ION_CACHE_CLEAN_BY_RANGE_USE_PA:
 	case ION_CACHE_INVALID_BY_RANGE_USE_PA:
 	case ION_CACHE_FLUSH_BY_RANGE_USE_PA:
+		sync_va = param->iova;
+		table = buffer->sg_table;
+#if defined(CONFIG_MTK_IOMMU_PGTABLE_EXT) && \
+	(CONFIG_MTK_IOMMU_PGTABLE_EXT > 32)
+		heap = buffer->heap;
+		if (heap->ops->get_table)
+			heap->ops->get_table(buffer, table);
+		if (!table) {
+			IONMSG("%s invalid table\n", __func__);
+			goto err;
+		}
 		ret = m4u_mva_map_kernel(
-				(unsigned int)sync_va,
-				sync_size, &kernel_va, &kernel_size);
+				sync_va, sync_size, &kernel_va,
+				&kernel_size, table);
+#else
+		ret = m4u_mva_map_kernel(
+				(unsigned int)sync_va, (unsigned int)sync_size,
+				&kernel_va, (unsigned int *)&kernel_size);
+#endif
 		if (ret)
 			goto err;
 		sync_va = kernel_va;
@@ -465,8 +575,14 @@ static long ion_sys_cache_sync(struct ion_client *client,
 	if (sync_type == ION_CACHE_CLEAN_BY_RANGE_USE_PA ||
 	    sync_type == ION_CACHE_INVALID_BY_RANGE_USE_PA ||
 	    sync_type == ION_CACHE_FLUSH_BY_RANGE_USE_PA) {
+#if defined(CONFIG_MTK_IOMMU_PGTABLE_EXT) && \
+	(CONFIG_MTK_IOMMU_PGTABLE_EXT > 32)
 		m4u_mva_unmap_kernel((unsigned long)param->va,
+				     sync_size, sync_va);
+#else
+		m4u_mva_unmap_kernel((unsigned int)param->va,
 				     (unsigned int)sync_size, sync_va);
+#endif
 	} else if (ion_need_unmap_flag) {
 		ion_unmap_kernel(client, kernel_handle);
 		ion_need_unmap_flag = 0;
@@ -479,11 +595,11 @@ out:
 	return ret;
 
 err:
-	IONMSG("%s sync[%d] err[k%d][hdl %d-%p][addr %p][sz:%d] clt[%s]\n",
-	       __func__, sync_type, from_kernel,
-	       param->handle, param->kernel_handle, param->va,
-	       param->size, (*client->dbg_name) ?
-	       client->dbg_name : client->name);
+	IONMSG("%s sync err:%d|k%d|hdl:%d-%p|addr:%p|iova:0x%llx|sz:%d|clt:%s\n"
+	       , __func__, sync_type, from_kernel,
+	       param->handle, param->kernel_handle,
+	       param->va, param->iova, param->size,
+	       (*client->dbg_name) ? client->dbg_name : client->name);
 	ion_drv_put_kernel_handle(kernel_handle);
 	return ret;
 }
@@ -709,7 +825,7 @@ static long ion_sys_ioctl(struct ion_client *client, unsigned int cmd,
 				       __func__);
 				ret = -EFAULT;
 			}
-			param.get_phys_param.phy_addr = (unsigned int)phy_addr;
+			param.get_phys_param.phy_addr = phy_addr;
 			ion_drv_put_kernel_handle(kernel_handle);
 		}
 		break;
@@ -889,6 +1005,7 @@ int ion_device_destroy_heaps(struct ion_device *dev)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_DEBUG_FS) || IS_ENABLED(CONFIG_PROC_FS)
 /*for clients ion mm heap summary size*/
 static int ion_clients_summary_show(struct seq_file *s, void *unused)
 {
@@ -938,6 +1055,7 @@ static int ion_clients_summary_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 static int ion_debug_client_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, ion_clients_summary_show, inode->i_private);
@@ -949,6 +1067,22 @@ static const struct file_operations debug_client_fops = {
 	.llseek = seq_lseek,
 	.release = single_release,
 };
+#endif
+
+#if IS_ENABLED(CONFIG_PROC_FS)
+static int ion_proc_client_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ion_clients_summary_show, PDE_DATA(inode));
+}
+
+static const struct file_operations proc_client_fops = {
+	.open = ion_proc_client_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+#endif
+#endif
 
 #ifdef CONFIG_MTK_IOMMU_V2
 struct device *g_iommu_device;
@@ -1007,16 +1141,26 @@ static int ion_drv_probe(struct platform_device *pdev)
 	g_ion_device->dev.this_device->archdata.dev_dma_ops = NULL;
 	#endif
 	arch_setup_dma_ops(g_ion_device->dev.this_device, 0, 0, NULL, false);
-	/* debugfs_create_file("ion_profile", 0644, g_ion_device->debug_root,*/
-	/*  NULL, &debug_profile_fops); */
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 	debugfs_create_file("clients_summary", 0644,
 			    g_ion_device->clients_debug_root, NULL,
 			    &debug_client_fops);
 	debugfs_create_symlink("ion_mm_heap", g_ion_device->debug_root,
 			       "./heaps/ion_mm_heap");
+#endif
+
+#if IS_ENABLED(CONFIG_PROC_FS)
+	proc_create("clients_summary", S_IFREG | 0664,
+		    g_ion_device->clients_proc_root,
+		    &proc_client_fops);
+	proc_symlink("ion_mm_heap", g_ion_device->proc_root,
+		     "./heaps/ion_mm_heap");
+#endif
 
 	ion_history_init();
 	ion_profile_init();
+	ion_dmabuf_init();
 
 	IONMSG("%s, done\n", __func__);
 	return 0;
@@ -1033,9 +1177,9 @@ int ion_drv_remove(struct platform_device *pdev)
 
 static struct ion_platform_heap ion_drv_platform_heaps[] = {
 	{
-	 .type = (unsigned int)ION_HEAP_TYPE_SYSTEM_CONTIG,
-	 .id = ION_HEAP_TYPE_SYSTEM_CONTIG,
-	 .name = "ion_system_contig_heap",
+	 .type = (unsigned int)ION_HEAP_TYPE_SYSTEM,
+	 .id = ION_HEAP_TYPE_SYSTEM,
+	 .name = "ion_system_heap",
 	 .base = 0,
 	 .size = 0,
 	 .align = 0,
@@ -1157,7 +1301,7 @@ static struct ion_platform_heap ion_drv_platform_heaps[] = {
 #ifdef CONFIG_FPGA_EARLY_PORTING
 	 .size = 0x10000000, /* reserve 256MB for Camera; */
 #else
-	 .size = 0x4000, /* reserve 16KB for Audio; */
+	 .size = 0xc000, /* reserve 48KB for Audio; */
 #endif
 	 .align = 0x1000, /* this must not be 0 if enable */
 	 .priv = NULL,

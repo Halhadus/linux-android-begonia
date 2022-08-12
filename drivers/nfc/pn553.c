@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 Trusted Logic S.A.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,6 +57,7 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/workqueue.h>
+#include <mt-plat/upmu_common.h>
 
 #include <linux/timer.h>
 #include "pn553.h"
@@ -272,10 +274,11 @@ static ssize_t pn544_dev_read(struct file *filp, char __user *buf, size_t count,
 			ret = wait_event_interruptible(pn544_dev->read_wq,
 						       !pn544_dev->irq_enabled);
 
+			pn544_disable_irq(pn544_dev);
+
 			if (ret)
 				goto fail;
 
-			pn544_disable_irq(pn544_dev);
 
 			if (gpio_get_value(pn544_dev->irq_gpio))
 				break;
@@ -609,7 +612,9 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		{
 			p61_access_state_t current_state = P61_STATE_INVALID;
 			p61_get_access_state(pn544_dev, &current_state);
+			dev_warn(&pn544_dev->client->dev, "set power  arg: %ld  current state:0x%x\n", arg, current_state);
 			if (arg == 2) {
+#if 0
 				if (current_state &
 				    (P61_STATE_SPI | P61_STATE_SPI_PRIO)
 				    && (pn544_dev->chip_pwr_scheme !=
@@ -623,28 +628,35 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					p61_access_unlock(pn544_dev);
 					return -EBUSY;	/* Device or resource busy */
 				}
+#endif
 				pn544_dev->nfc_ven_enabled = true;
+#if 0
 				if ((pn544_dev->spi_ven_enabled == false
 				     && !(pn544_dev->secure_timer_cnt))
 				    || (pn544_dev->chip_pwr_scheme ==
 					PN80T_EXT_PMU_SCHEME)) {
+#endif
 					/* power on with firmware download (requires hw reset)
 					 */
 					pr_info("%s power on with firmware\n",
 						__func__);
+					dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 					gpio_set_value(pn544_dev->ven_gpio, 1);
 					msleep(10);
 					if (pn544_dev->firm_gpio) {
 						p61_update_access_state
 						    (pn544_dev, P61_STATE_DWNLD,
 						     true);
-						gpio_set_value(pn544_dev->
-							       firm_gpio, 1);
+						dev_warn(&pn544_dev->client->dev, "set firmware HIGHT\n");
+						gpio_set_value(pn544_dev->firm_gpio, 1);
+#if 0
 					}
-
+#endif
 					msleep(10);
+					dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 					gpio_set_value(pn544_dev->ven_gpio, 0);
 					msleep(10);
+					dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 					gpio_set_value(pn544_dev->ven_gpio, 1);
 					msleep(10);
 				}
@@ -664,6 +676,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 						    (pn544_dev, P61_STATE_DWNLD,
 						     false);
 					}
+					dev_warn(&pn544_dev->client->dev, "set firmware LOW\n");
 					gpio_set_value(pn544_dev->firm_gpio, 0);
 				}
 
@@ -672,6 +685,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				if (pn544_dev->spi_ven_enabled == false
 				    || (pn544_dev->chip_pwr_scheme ==
 					PN80T_EXT_PMU_SCHEME)) {
+					dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 					gpio_set_value(pn544_dev->ven_gpio, 1);
 				}
 //#endif
@@ -686,6 +700,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 						    (pn544_dev, P61_STATE_IDLE,
 						     true);
 					}
+					dev_warn(&pn544_dev->client->dev, "set firmware LOW\n");
 					gpio_set_value(pn544_dev->firm_gpio, 0);
 				}
 
@@ -696,6 +711,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				     && !(pn544_dev->secure_timer_cnt))
 				    || (pn544_dev->chip_pwr_scheme ==
 					PN80T_EXT_PMU_SCHEME)) {
+					dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 					gpio_set_value(pn544_dev->ven_gpio, 0);
 				}
 //#endif
@@ -731,6 +747,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					p61_update_access_state(pn544_dev,
 								P61_STATE_DWNLD,
 								true);
+					dev_warn(&pn544_dev->client->dev, "set firmware HIGHT\n");
 					gpio_set_value(pn544_dev->firm_gpio, 1);
 					pn544_dev->state_flags |=
 					    (P544_FLAG_FW_DNLD);
@@ -738,14 +755,17 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				}
 			} else if (arg == 5) {
 				msleep(10);
+				dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 				gpio_set_value(pn544_dev->ven_gpio, 0);
 				msleep(10);
+				dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 				gpio_set_value(pn544_dev->ven_gpio, 1);
 				msleep(10);
 				pr_info("%s VEN reset DONE >>>>>>>\n",
 					__func__);
 			} else if (arg == 6) {
 				if (pn544_dev->firm_gpio) {
+					dev_warn(&pn544_dev->client->dev, "set firmware LOW\n");
 					gpio_set_value(pn544_dev->firm_gpio, 0);
 					pn544_dev->state_flags &=
 					    ~(P544_FLAG_FW_DNLD);
@@ -765,8 +785,8 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			p61_access_state_t current_state = P61_STATE_INVALID;
 			p61_get_access_state(pn544_dev, &current_state);
 			if (arg == 1) {
-				pr_info
-				    ("%s : PN61_SET_SPI_PWR - power on ese\n",
+				dev_warn(&pn544_dev->client->dev,
+				    "%s : PN61_SET_SPI_PWR - power on ese\n",
 				     __func__);
 				if ((current_state &
 				     (P61_STATE_SPI | P61_STATE_SPI_PRIO)) ==
@@ -802,14 +822,15 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					if (pn544_dev->chip_pwr_scheme ==
 					    PN80T_EXT_PMU_SCHEME)
 						break;
-#ifndef VEN_ALWAYS_ON
+//#ifndef VEN_ALWAYS_ON
 					if (pn544_dev->nfc_ven_enabled == false) {
 						/* provide power to NFCC if, NFC service not provided */
+						dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 						gpio_set_value(pn544_dev->
 							       ven_gpio, 1);
 						msleep(10);
 					}
-#endif
+//#endif
 
 					/* Delay (10ms) after SVDD_PWR_ON to allow JCOP to bootup (5ms jcop boot time + 5ms guard time) */
 					usleep_range(10000, 12000);
@@ -822,8 +843,8 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					return -EBUSY;	/* Device or resource busy */
 				}
 			} else if (arg == 0) {
-				pr_info
-				    ("%s : PN61_SET_SPI_PWR - power off ese\n",
+				dev_warn(&pn544_dev->client->dev,
+				    "%s : PN61_SET_SPI_PWR - power off ese\n",
 				     __func__);
 				if (current_state & P61_STATE_SPI_PRIO) {
 					p61_update_access_state(pn544_dev,
@@ -891,6 +912,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					if ((pn544_dev->nfc_ven_enabled ==
 					     false)
 					    && !(pn544_dev->secure_timer_cnt)) {
+						dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 						gpio_set_value(pn544_dev->
 							       ven_gpio, 0);
 						msleep(10);
@@ -1002,6 +1024,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					    && (pn544_dev->chip_pwr_scheme !=
 						PN80T_EXT_PMU_SCHEME)
 					    && !(pn544_dev->secure_timer_cnt)) {
+						dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 						gpio_set_value(pn544_dev->
 							       ven_gpio, 0);
 						msleep(10);
@@ -1031,6 +1054,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 							chip_pwr_scheme !=
 							PN80T_EXT_PMU_SCHEME)) {
 							/* provide power to NFCC if, NFC service not provided */
+							dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 							gpio_set_value
 							    (pn544_dev->
 							     ven_gpio, 1);
@@ -1095,6 +1119,7 @@ long pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 						if (pn544_dev->
 						    nfc_ven_enabled == false) {
 							/* provide power to NFCC if, NFC service not provided */
+							dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 							gpio_set_value
 							    (pn544_dev->
 							     ven_gpio, 1);
@@ -1360,6 +1385,7 @@ static void secure_timer_workqueue(struct work_struct *Wq)
 		usleep_range(2500, 3000);
 #ifndef VEN_ALWAYS_ON
 		if (g_pn544_dev->nfc_service_pid == 0x00) {
+			dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 			gpio_set_value(g_pn544_dev->ven_gpio, 0);
 			printk(KERN_INFO
 			       "secure_timer_callback :make ven_gpio low, state = %d",
@@ -1551,6 +1577,7 @@ static int pn544_probe(struct i2c_client *client,
 		       const struct i2c_device_id *id)
 {
 	int ret;
+        unsigned int ret1 = 0;
 	struct pn544_i2c_platform_data *platform_data;
 	printk("%s: enter\n", __func__);
 
@@ -1698,6 +1725,10 @@ static int pn544_probe(struct i2c_client *client,
 		dev_err(&client->dev, "request_irq failed\n");
 		goto err_request_irq_failed;
 	}
+	ret = enable_irq_wake(client->irq);
+	if (ret) {
+		dev_err(&client->dev, "enable_irq_wake failed\n");
+	}
 	pn544_disable_irq(g_pn544_dev);
 	device_init_wakeup(&client->dev, true);
 	device_set_wakeup_capable(&client->dev, true);
@@ -1706,8 +1737,10 @@ static int pn544_probe(struct i2c_client *client,
 #ifdef VEN_ALWAYS_ON
 	msleep(5);		/* VBAT--> VDDIO(HIGH) + Guardtime of min 5ms --> VEN(HIGH) */
 	/* VEN toggle(reset) to proceed */
+	dev_warn(&client->dev, "set ven LOW\n");
 	gpio_set_value(g_pn544_dev->ven_gpio, 0);
 	msleep(5);
+	dev_warn(&client->dev, "set ven HIGHT\n");
 	gpio_set_value(g_pn544_dev->ven_gpio, 1);
 #endif
 
@@ -1717,6 +1750,14 @@ static int pn544_probe(struct i2c_client *client,
 	 * hardware info is required during probe*/
 	check_hw_info();
 #endif
+        //Add change for xo_nfc clock impedance value 50 ohm
+        ret1 = pmic_config_interface(
+		(MT6359_DCXO_CW19),
+		3,
+		(PMIC_RG_XO_EXTBUF3_RSEL_MASK),
+		(PMIC_RG_XO_EXTBUF3_RSEL_SHIFT)
+			);
+	pr_info("%s : the ret1 result is %d\n", __func__,ret1);
 	pr_info("%s : we going to return 0\n", __func__);
 	return 0;
 
@@ -1864,10 +1905,13 @@ static void check_hw_info(void)
 	 * If not allowed then previous FW download is interrupted in between
 	 * */
 	pr_info("%s :Ven Reset \n", __func__);
+	dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 	gpio_set_value(pn544_dev->ven_gpio, 1);
 	msleep(10);
+	dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 	gpio_set_value(pn544_dev->ven_gpio, 0);
 	msleep(10);
+	dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 	gpio_set_value(pn544_dev->ven_gpio, 1);
 	msleep(10);
 	ret = i2c_master_send(pn544_dev->client, cmd_reset_nci, 4);
@@ -1883,16 +1927,20 @@ static void check_hw_info(void)
 		 * */
 		pr_err("%s : write failed\n", __func__);
 		pr_info("%s power on with firmware\n", __func__);
+		dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 		gpio_set_value(pn544_dev->ven_gpio, 1);
 		msleep(10);
 		if (pn544_dev->firm_gpio) {
 			p61_update_access_state(pn544_dev, P61_STATE_DWNLD,
 						true);
+			dev_warn(&pn544_dev->client->dev, "set firmware HIGHT\n");
 			gpio_set_value(pn544_dev->firm_gpio, 1);
 		}
 		msleep(10);
+		dev_warn(&pn544_dev->client->dev, "set ven LOW\n");
 		gpio_set_value(pn544_dev->ven_gpio, 0);
 		msleep(10);
+		dev_warn(&pn544_dev->client->dev, "set ven HIGHT\n");
 		gpio_set_value(pn544_dev->ven_gpio, 1);
 		msleep(10);
 		ret =

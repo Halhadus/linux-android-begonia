@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -94,7 +93,6 @@ static u32 suspend_pcm_flags = {
 	#if !defined(CONFIG_MTK_TINYSYS_SSPM_SUPPORT)
 	SPM_FLAG_DISABLE_SSPM_SRAM_SLEEP |
 	#endif
-	SPM_FLAG_DISABLE_BUS_CLK_OFF |
 	SPM_FLAG_DISABLE_VCORE_DVS |
 	SPM_FLAG_DISABLE_VCORE_DFS,
 };
@@ -111,7 +109,6 @@ static u32 slp_dp_pcm_flags = {
 	#if !defined(CONFIG_MTK_TINYSYS_SSPM_SUPPORT)
 	SPM_FLAG_DISABLE_SSPM_SRAM_SLEEP |
 	#endif
-	SPM_FLAG_DISABLE_BUS_CLK_OFF |
 	SPM_FLAG_DISABLE_INFRA_PDN |
 	SPM_FLAG_DISABLE_VCORE_DVS |
 	SPM_FLAG_DISABLE_VCORE_DFS |
@@ -253,7 +250,7 @@ static unsigned int spm_output_wake_reason(unsigned int ex_flag,
 		PCM_TICK_TO_SEC((wakesta->timer_out % PCM_32K_TICKS_PER_SEC)
 		* 1000));
 
-	log_wakeup_reason(mtk_spm_get_irq_0());
+	log_irq_wakeup_reason(mtk_spm_get_irq_0());
 
 #ifdef CONFIG_MTK_CCCI_DEVICES
 		exec_ccci_kern_func_by_md_id(0, ID_DUMP_MD_SLEEP_MODE,

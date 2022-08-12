@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -23,8 +22,6 @@
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/alarmtimer.h>
-#include <linux/kthread.h>
-#include <linux/power_supply.h>
 #include <mt-plat/charger_type.h>
 #include <mt-plat/mtk_charger.h>
 #include <mt-plat/mtk_battery.h>
@@ -34,11 +31,14 @@
 #include <mt-plat/charger_class.h>
 
 struct charger_manager;
+struct charger_data;
 #include "mtk_pe_intf.h"
 #include "mtk_pe20_intf.h"
 #include "mtk_pe40_intf.h"
+#include "mtk_pe50_intf.h"
 #include "mtk_pdc_intf.h"
 #include "adapter_class.h"
+#include "mtk_smartcharging.h"
 
 #define CHARGING_INTERVAL 10
 #define CHARGING_FULL_INTERVAL 20
@@ -80,6 +80,11 @@ do {								\
 #define	CHR_PE40_TUNING	(0x0009)
 #define	CHR_PE40_POSTCC	(0x000A)
 #define CHR_PE30	(0x000B)
+#define CHR_PE40	(0x000C)
+#define CHR_PDC		(0x000D)
+#define CHR_PE50_READY	(0x000E)
+#define CHR_PE50_RUNNING	(0x000F)
+#define CHR_PE50	(0x0010)
 
 /* charging abnormal status */
 #define CHG_VBUS_OV_STATUS	(1 << 0)
@@ -90,46 +95,6 @@ do {								\
 #define CHG_BAT_LT_STATUS	(1 << 5)
 #define CHG_TYPEC_WD_STATUS	(1 << 6)
 
-#define MAX_STEP_CHG_ENTRIES	4
-
-/* HVDCP type */
-enum hvdcp_status{
-	HVDCP_NULL,
-	HVDCP,
-	HVDCP_3,
-};
-
-enum hvdcp3_type {
-	HVDCP3_NONE = 0,
-	HVDCP3_CLASSA_18W,
-	HVDCP3_CLASSB_27W,
-	USB_PD,
-	HVDCP2_TYPE,
-};
-
-/* quick charge type */
-enum quick_charge_type {
-	QUICK_CHARGE_NORMAL = 0,
-	QUICK_CHARGE_FAST,
-	QUICK_CHARGE_FLASH,
-	QUICK_CHARGE_TURBE,
-	QUICK_CHARGE_MAX,
-};
-
-struct quick_charge {
-	enum power_supply_type adap_type;
-	enum quick_charge_type adap_cap;
-};
-
-/*wireless charger type*/
-enum wireless_chg_state {
-	WIRELESS_NULL = 0,
-	WIRELESS_SDP,
-	WIRELESS_CDP,
-	WIRELESS_CHG_CDP,
-	WIRELESS_CHG_DCP,
-	WIRELESS_CHG_HVDCP,
-};
 /* charger_algorithm notify charger_dev */
 enum {
 	EVENT_EOC,
@@ -143,6 +108,13 @@ enum {
 	CHARGER_DEV_NOTIFY_EOC,
 	CHARGER_DEV_NOTIFY_RECHG,
 	CHARGER_DEV_NOTIFY_SAFETY_TIMEOUT,
+	CHARGER_DEV_NOTIFY_VBATOVP_ALARM,
+	CHARGER_DEV_NOTIFY_VBUSOVP_ALARM,
+	CHARGER_DEV_NOTIFY_IBATOCP,
+	CHARGER_DEV_NOTIFY_IBUSOCP,
+	CHARGER_DEV_NOTIFY_IBUSUCP_FALL,
+	CHARGER_DEV_NOTIFY_VOUTOVP,
+	CHARGER_DEV_NOTIFY_VDROVP,
 };
 
 /*
@@ -161,17 +133,11 @@ enum sw_jeita_state_enum {
 	TEMP_T3_TO_T4,
 	TEMP_ABOVE_T4
 };
-struct range_data {
-	u32 low_threshold;
-	u32 high_threshold;
-	u32 value;
-};
 
 struct sw_jeita_data {
 	int sm;
 	int pre_sm;
 	int cv;
-	int pre_cv;
 	bool charging;
 	bool error_recovery_flag;
 };
@@ -182,6 +148,7 @@ enum bat_temp_state_enum {
 	BAT_TEMP_NORMAL,
 	BAT_TEMP_HIGH
 };
+
 struct battery_thermal_protection_data {
 	int sm;
 	bool enable_min_charge_temp;
@@ -274,8 +241,6 @@ struct charger_custom_data {
 	u32 pe40_r_cable_3a_lower;
 
 	/* dual charger */
-	u32 chg1_ta_ac_charger_input_current;
-	u32 chg2_ta_ac_charger_input_current;
 	u32 chg1_ta_ac_charger_current;
 	u32 chg2_ta_ac_charger_current;
 	int slave_mivr_diff;
@@ -309,7 +274,6 @@ struct charger_custom_data {
 
 	int vsys_watt;
 	int ibus_err;
-	int set_cap_delay;
 };
 
 struct charger_data {
@@ -342,14 +306,18 @@ struct charger_manager {
 	struct notifier_block chg2_nb;
 	struct charger_data chg2_data;
 
+	struct charger_device *dvchg1_dev;
+	struct notifier_block dvchg1_nb;
+	struct charger_data dvchg1_data;
+
+	struct charger_device *dvchg2_dev;
+	struct notifier_block dvchg2_nb;
+	struct charger_data dvchg2_data;
+
 	struct adapter_device *pd_adapter;
 
 
 	enum charger_type chr_type;
-	enum hvdcp_status hvdcp_type;
-	enum wireless_chg_state wireless_status;
-	int hvdcp_check_count;
-
 	bool can_charging;
 	int cable_out_cnt;
 
@@ -370,7 +338,6 @@ struct charger_manager {
 
 	/* sw jeita */
 	bool enable_sw_jeita;
-	bool swjeita_enable_dual_charging;
 	struct sw_jeita_data sw_jeita;
 
 	/* dynamic_cv */
@@ -406,7 +373,13 @@ struct charger_manager {
 
 	/* pe 4.0 */
 	bool enable_pe_4;
+	bool leave_pe4;
 	struct mtk_pe40 pe4;
+
+	/* pe 5.0 */
+	bool enable_pe_5;
+	bool leave_pe5;
+	struct mtk_pe50 pe5;
 
 	/* type-C*/
 	bool enable_type_c;
@@ -415,18 +388,11 @@ struct charger_manager {
 	bool water_detected;
 
 	/* pd */
+	bool leave_pdc;
 	struct mtk_pdc pdc;
 	bool disable_pd_dual;
 
-	/* Ra Rp detection */
-	bool ra_detected;
-	int	rp_lvl;
-
-	/* Wireless charger*/
-	bool is_wireless_charger;
-
 	int pd_type;
-	//struct tcpc_device *tcpc;
 	bool pd_reset;
 
 	/* thread related */
@@ -448,7 +414,7 @@ struct charger_manager {
 	bool charger_thread_polling;
 
 	/* kpoc */
-	atomic_t  enable_kpoc_shdn;
+	atomic_t enable_kpoc_shdn;
 
 	/* ATM */
 	bool atm_enabled;
@@ -456,82 +422,20 @@ struct charger_manager {
 	/* dynamic mivr */
 	bool enable_dynamic_mivr;
 
-	/* input suspend*/
-	bool is_input_suspend;
-
-	struct power_supply	*usb_psy;
-	struct power_supply	*battery_psy;
-	struct power_supply	*wireless_psy;
-
-	/*delay work*/
-	struct delayed_work	pd_hard_reset_work;
-	/* plug in time*/
-	struct timespec plugintime;
-
-	/*thermal level*/
-	int system_temp_level;
-	int system_temp_level_max;
-
-	int	 *thermal_mitigation_dcp;
-	int	 *thermal_mitigation_qc3;
-	int	 *thermal_mitigation_qc2;
-	int	 *thermal_mitigation_pd_base;
-
-	/*cycle count cv*/
-	struct range_data	cycle_count_cv_cfg[MAX_STEP_CHG_ENTRIES];
-};
+	struct smartcharging sc;
 
 
-struct chg_type_info {
-	struct device *dev;
-	struct charger_consumer *chg_consumer;
-	struct tcpc_device *tcpc_dev;
-	struct notifier_block pd_nb;
-	struct notifier_block otg_nb;
-	bool tcpc_kpoc;
-	/* Charger Detection */
-	struct mutex chgdet_lock;
-	bool chgdet_en;
-	atomic_t chgdet_cnt;
-	wait_queue_head_t waitq;
-	struct kthread_work chgdet_task_threadfn;
-	struct task_struct *chgdet_task;
-	struct workqueue_struct *pwr_off_wq;
-	struct work_struct pwr_off_work;
-        struct workqueue_struct *chg_in_wq;
-        struct work_struct chg_in_work;
-	bool ignore_usb;
-	bool plugin;
-	int cc_orientation;
-	int typec_mode;
-};
+	/*daemon related*/
+	struct sock *daemo_nl_sk;
+	u_int g_scd_pid;
+	struct scd_cmd_param_t_1 sc_data;
 
-/* Power Supply */
-struct mt_charger {
-	struct device *dev;
-	struct power_supply_desc chg_desc;
-	struct power_supply_config chg_cfg;
-	struct power_supply *chg_psy;
-	struct power_supply_desc ac_desc;
-	struct power_supply_config ac_cfg;
-	struct power_supply *ac_psy;
-	struct power_supply_desc usb_desc;
-	struct power_supply_config usb_cfg;
-	struct power_supply *usb_psy;
-	struct power_supply_desc main_desc;
-	struct power_supply_config main_cfg;
-	struct power_supply *main_psy;
-	struct power_supply *parallel_psy;
-	struct chg_type_info *cti;
-	bool chg_online; /* Has charger in or not */
-	enum charger_type chg_type;
-	enum hvdcp_status	hvdcp_type;
-	struct charger_device *chg1_dev;
 };
 
 /* charger related module interface */
 extern int charger_manager_notifier(struct charger_manager *info, int event);
 extern int mtk_switch_charging_init(struct charger_manager *info);
+extern int mtk_switch_charging_init2(struct charger_manager *info);
 extern int mtk_dual_switch_charging_init(struct charger_manager *info);
 extern int mtk_linear_charging_init(struct charger_manager *info);
 extern void _wake_up_charger(struct charger_manager *info);
@@ -539,7 +443,6 @@ extern int mtk_get_dynamic_cv(struct charger_manager *info, unsigned int *cv);
 extern bool is_dual_charger_supported(struct charger_manager *info);
 extern int charger_enable_vbus_ovp(struct charger_manager *pinfo, bool enable);
 extern bool is_typec_adapter(struct charger_manager *info);
-extern int charger_manager_get_quick_charge_type(void);
 
 /* pmic API */
 extern unsigned int upmu_get_rgs_chrdet(void);

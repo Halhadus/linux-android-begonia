@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -54,6 +54,9 @@ extern unsigned int arr_fps_backup;
 extern unsigned int arr_fps_enable;
 
 extern atomic_t real_input_layer;
+
+extern bool g_force_cfg;
+extern unsigned int g_force_cfg_id;
 
 struct DISP_LAYER_INFO {
 	unsigned int id;
@@ -227,22 +230,16 @@ enum arr_fps_type {
 };
 struct display_primary_path_context {
 	enum DISP_POWER_STATE state;
-	unsigned int lcm_fps;
-	/*ARR varibles to record dfps:
-	 * dynamic_fps: new request fps from user space
-	 * last_arr_dfps: last request fps from user space,
-	 * maybe last requet hasn't worked, gce hasn't finished update register
-	 * working_dfps: the working requested dynamic fps from userspace
-	 * hw_current_fps: the HW running fps now,
-	 * will also be changed when enter/leave idle
-	 * the above varibles will not change when enter or leave idle,
-	 * except hw_current_fps
-	 */
+	unsigned int lcm_fps;/*real fps * 100*/
 	unsigned int dynamic_fps;
+	/*ARR next_frame_fps is referenc to the notify time
+	 * next_frame_fps is the fps of the frame
+	 * which immediately will be shown on display
+	 */
 	unsigned int last_arr_dfps;
 	unsigned int working_dfps;
 	unsigned int hw_current_fps;
-	int lcm_refresh_rate;
+	unsigned int lcm_refresh_rate; /*real fps*/
 	int max_layer;
 	int need_trigger_overlay;
 	int need_trigger_ovl1to2;
@@ -298,6 +295,16 @@ struct display_primary_path_context {
 
 	wait_queue_head_t fps_chg_wait_queue;
 	unsigned int fps_chg_last_notify;
+
+#ifdef CONFIG_MTK_HIGH_FRAME_RATE
+	/*DynFPS start*/
+	int active_cfg;
+	struct mutex dynfps_lock;
+	struct multi_configs multi_cfg_table;
+	cmdqBackupSlotHandle config_id_slot;
+	unsigned int first_cfg;
+	/*DynFPS end*/
+#endif
 };
 
 #define LCM_FPS_ARRAY_SIZE	32
@@ -539,20 +546,46 @@ void primary_display_update_vfp_line_slot(
 		struct cmdqRecStruct *handle, unsigned int apply_vfp);
 unsigned int primary_display_current_fps(enum arr_fps_type fps_type,
 		int need_lock);
+/**************function for ARR end************************/
+
 bool disp_idle_check_rsz(void);
 int primary_display_is_directlink_mode(void);
 bool disp_input_has_yuv(void);
-void _primary_display_arr_send_lcm_cmd(
-		unsigned int from_fps, unsigned int to_fps);
-
-/**************function for ARR end************************/
-
-int primary_display_set_panel_param(unsigned int param);
 
 extern struct lcm_fps_ctx_t lcm_fps_ctx;
 int lcm_fps_ctx_init(struct lcm_fps_ctx_t *fps_ctx);
 int lcm_fps_ctx_reset(struct lcm_fps_ctx_t *fps_ctx);
 int lcm_fps_ctx_update(struct lcm_fps_ctx_t *fps_ctx,
 		unsigned long long cur_ns);
+
+#ifdef CONFIG_MTK_HIGH_FRAME_RATE
+/**************function for DynFPS start************************/
+unsigned int primary_display_is_support_DynFPS(void);
+unsigned int primary_display_get_default_disp_fps(int need_lock);
+unsigned int primary_display_get_def_timing_fps(int need_lock);
+int primary_display_get_cfg_fps(
+	int config_id, unsigned int *fps, unsigned int *vact_timing_fps);
+unsigned int primary_display_get_current_cfg_id(void);
+void primary_display_update_cfg_id(int cfg_id);
+void primary_display_init_multi_cfg_info(void);
+int primary_display_get_multi_configs(struct multi_configs *p_cfgs);
+void primary_display_dynfps_chg_fps(int cfg_id);
+void primary_display_dynfps_get_vfp_info(
+	unsigned int *vfp, unsigned int *vfp_for_lp);
+
+
+#if 0
+bool primary_display_need_update_golden_fps(
+	unsigned int last_fps, unsigned int new_fps);
+bool primary_display_need_update_hrt_fps(
+	unsigned int last_fps, unsigned int new_fps);
+#endif
+
+/**************function for DynFPS end************************/
+#endif
+
+void _primary_display_arr_send_lcm_cmd(
+		unsigned int from_fps, unsigned int to_fps);
+int primary_display_set_panel_param(unsigned int param);
 
 #endif

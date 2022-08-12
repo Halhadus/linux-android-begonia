@@ -2,7 +2,6 @@
  * mm/rmap.c - physical to virtual reverse mappings
  *
  * Copyright 2001, Rik van Riel <riel@conectiva.com.br>
- * Copyright (C) 2020 XiaoMi, Inc.
  * Released under the General Public License (GPL).
  *
  * Simple, low overhead reverse mapping scheme.
@@ -515,8 +514,10 @@ struct anon_vma *page_get_anon_vma(struct page *page)
 
 	anon_vma = (struct anon_vma *) (anon_mapping - PAGE_MAPPING_ANON);
 
-	if (!is_anon_vma_type(anon_vma))
+	if (!is_anon_vma_type(anon_vma)) {
+		anon_vma = NULL;
 		goto out;
+	}
 
 	if (!atomic_inc_not_zero(&anon_vma->refcount)) {
 		anon_vma = NULL;
@@ -563,13 +564,17 @@ struct anon_vma *page_lock_anon_vma_read(struct page *page)
 
 	anon_vma = (struct anon_vma *) (anon_mapping - PAGE_MAPPING_ANON);
 
-	if (!is_anon_vma_type(anon_vma))
+	if (!is_anon_vma_type(anon_vma)) {
+		anon_vma = NULL;
 		goto out;
+	}
 
 	root_anon_vma = READ_ONCE(anon_vma->root);
 
-	if (!is_anon_vma_type(root_anon_vma))
+	if (!is_anon_vma_type(root_anon_vma)) {
+		anon_vma = NULL;
 		goto out;
+	}
 
 	if (down_read_trylock(&root_anon_vma->rwsem)) {
 		/*

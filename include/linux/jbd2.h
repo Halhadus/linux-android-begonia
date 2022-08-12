@@ -4,7 +4,7 @@
  * Written by Stephen C. Tweedie <sct@redhat.com>
  *
  * Copyright 1998-2000 Red Hat, Inc --- All Rights Reserved
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This file is part of the Linux kernel and is made available under
  * the terms of the GNU General Public License, version 2, or at your
@@ -1294,10 +1294,6 @@ JBD2_FEATURE_INCOMPAT_FUNCS(csum3,		CSUM_V3)
 						 * mode */
 #define JBD2_REC_ERR	0x080	/* The errno in the sb has been recorded */
 
-#define JBD2_TEMP_NOBARRIER	0x81000000	/* Temporarily disable
-						 * barrier
-						 */
-
 /*
  * Function declarations for the journaling transaction and buffer
  * management
@@ -1631,7 +1627,7 @@ static inline int jbd2_space_needed(journal_t *journal)
 static inline unsigned long jbd2_log_space_left(journal_t *journal)
 {
 	/* Allow for rounding errors */
-	unsigned long free = journal->j_free - 32;
+	long free = journal->j_free - 32;
 
 	if (journal->j_committing_transaction) {
 		unsigned long committing = atomic_read(&journal->
@@ -1640,7 +1636,7 @@ static inline unsigned long jbd2_log_space_left(journal_t *journal)
 		/* Transaction + control blocks */
 		free -= committing + (committing >> JBD2_CONTROL_BLOCKS_SHIFT);
 	}
-	return free;
+	return max_t(long, free, 0);
 }
 
 /*

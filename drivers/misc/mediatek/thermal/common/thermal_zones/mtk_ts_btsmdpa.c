@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -34,7 +34,9 @@
 #include <tmp_bts.h>
 #include <linux/slab.h>
 #if defined(CONFIG_MEDIATEK_MT6577_AUXADC)
+#include <linux/of.h>
 #include <linux/iio/consumer.h>
+#include <linux/iio/iio.h>
 #endif
 /*=============================================================
  *Weak functions
@@ -70,10 +72,10 @@ static int mtkts_btsmdpa_debug_log;
 static int kernelmode;
 static int g_THERMAL_TRIP[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-static int num_trip = 1;
+static int num_trip = 3;
 static char g_bind0[20] = "mtk-cl-kshutdown00";
-static char g_bind1[20] = { 0 };
-static char g_bind2[20] = { 0 };
+static char g_bind1[20] = "mtk-cl-mdoff";
+static char g_bind2[20] = "mtk-cl-noIMS";
 static char g_bind3[20] = { 0 };
 static char g_bind4[20] = { 0 };
 static char g_bind5[20] = { 0 };
@@ -104,11 +106,12 @@ do {                                    \
 } while (0)
 
 #define mtkts_btsmdpa_printk(fmt, args...) \
-pr_debug("[Thermal/TZ/BTSMDPA]" fmt, ##args)
+pr_notice("[Thermal/TZ/BTSMDPA]" fmt, ##args)
 
 
 #if defined(CONFIG_MEDIATEK_MT6577_AUXADC)
 struct iio_channel *thermistor_ch1;
+static int g_ADC_channel;
 #endif
 
 /* #define INPUT_PARAM_FROM_USER_AP */
@@ -500,16 +503,16 @@ static __s16 mtkts_btsmdpa_thermistor_conver_temp(__s32 Res)
 	int i = 0;
 	int asize = 0;
 	__s32 RES1 = 0, RES2 = 0;
-	__s32 TAP_Value = -200, TMP1 = 0, TMP2 = 0;
+	__s32 TAP_Value = -2000, TMP1 = 0, TMP2 = 0;
 
 	asize = (ntc_tbl_size / sizeof(struct BTSMDPA_TEMPERATURE));
 	/* mtkts_btsmdpa_dprintk("%s() :
 	 * asize = %d, Res = %d\n", __func__,asize,Res);
 	 */
 	if (Res >= BTSMDPA_Temperature_Table[0].TemperatureR) {
-		TAP_Value = -40;	/* min */
+		TAP_Value = -400;	/* min */
 	} else if (Res <= BTSMDPA_Temperature_Table[asize - 1].TemperatureR) {
-		TAP_Value = 125;	/* max */
+		TAP_Value = 1250;	/* max */
 	} else {
 		RES1 = BTSMDPA_Temperature_Table[0].TemperatureR;
 		TMP1 = BTSMDPA_Temperature_Table[0].BTSMDPA_Temp;
@@ -536,7 +539,7 @@ static __s16 mtkts_btsmdpa_thermistor_conver_temp(__s32 Res)
 			 */
 		}
 
-		TAP_Value = (((Res - RES2) * TMP1) + ((RES1 - Res) * TMP2))
+		TAP_Value = (((Res - RES2) * TMP1) + ((RES1 - Res) * TMP2))*10
 								/ (RES1 - RES2);
 	}
 
@@ -716,7 +719,7 @@ int mtkts_btsmdpa_get_hw_temp(void)
 	/* get HW AP temp (TSAP) */
 	/* cat /sys/class/power_supply/AP/AP_temp */
 	t_ret = get_hw_btsmdpa_temp();
-	t_ret = t_ret * 1000;
+	t_ret = t_ret * 100;
 
 #if MTKTS_BTSMDPA_SW_FILTER
 	if ((t_ret > 100000) || (t_ret < -30000)) {
@@ -1190,8 +1193,11 @@ static int mtkts_btsmdpa_param_read(struct seq_file *m, void *v)
 	seq_printf(m, "%d\n", g_RAP_pull_up_voltage);
 	seq_printf(m, "%d\n", g_TAP_over_critical_low);
 	seq_printf(m, "%d\n", g_RAP_ntc_table);
+#if defined(CONFIG_MEDIATEK_MT6577_AUXADC)
+	seq_printf(m, "%d\n", g_ADC_channel);
+#else
 	seq_printf(m, "%d\n", g_RAP_ADC_channel);
-
+#endif
 	return 0;
 }
 
@@ -1432,6 +1438,11 @@ static int mtkts_btsmdpa_probe(struct platform_device *pdev)
 			__func__, ret);
 		return ret;
 	}
+
+	g_ADC_channel = thermistor_ch1->channel->channel;
+	mtkts_btsmdpa_printk("[%s]get auxadc iio ch: %d\n", __func__,
+		thermistor_ch1->channel->channel);
+
 
 	return err;
 }

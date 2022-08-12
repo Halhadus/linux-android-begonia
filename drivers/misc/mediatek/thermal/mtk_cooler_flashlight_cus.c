@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -37,7 +37,7 @@ static struct thermal_cooling_device
 *cl_flashlight_dev[FLASHLIGHT_COOLER_NR] = { 0 };
 static unsigned int g_cl_id[FLASHLIGHT_COOLER_NR];
 static unsigned int g_flashlight_level;
-static unsigned int g_max_flashlight_level;
+static unsigned int g_max_flashlight_level = 0;
 
 static int mtk_cl_flashlight_get_max_state
 (struct thermal_cooling_device *cdev, unsigned long *state)
@@ -59,7 +59,8 @@ static int mtk_cl_flashlight_set_cur_state
 	if (state < g_max_flashlight_level) {
 		flashlight_set_cooler_level(state);
 		g_flashlight_level = state;
-		mtk_cooler_flashlight_dprintk("%u\n", g_flashlight_level);
+		mtk_cooler_flashlight_dprintk("%s: %d\n",
+			__func__, g_flashlight_level);
 	}
 
 	return 0;

@@ -24,7 +24,7 @@
  *
  *
  * Copyright (c) 2015 Fingerprint Cards AB <tech@fingerprints.com>
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License Version 2
@@ -46,6 +46,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <teei_fp.h>
+#include <linux/fb.h>
+#include <linux/atomic.h>
 #ifndef CONFIG_SPI_MT65XX
 #include "mtk_spi.h"
 #include "mtk_spi_hal.h"
@@ -67,11 +69,12 @@
 
 #define FPC_IRQ_DEV_NAME         "fpc_irq"
 #define FPC_TTW_HOLD_TIME 2000
+#define FP_UNLOCK_REJECTION_TIMEOUT (FPC_TTW_HOLD_TIME - 500) /*ms*/
 
 #define     FPC102X_REG_HWID      252
 //#define FPC1021_CHIP 0x0210
 //#define FPC1021_CHIP_MASK_SENSOR_TYPE 0xfff0
-#define FPC1022_CHIP 0x1000
+#define FPC1022_CHIP 0x1800
 #define FPC1022_CHIP_MASK_SENSOR_TYPE 0xff00
 
 #define GPIO_GET(pin) __gpio_get_value(pin)	//get input pin value
@@ -80,11 +83,22 @@
 //void mt_spi_enable_clk(struct mt_spi_t *ms);
 //void mt_spi_disable_clk(struct mt_spi_t *ms);
 
+//#define FPC_DRM_INTERFACE_WA
+#ifndef FPC_DRM_INTERFACE_WA
+#include <drm/drm_bridge.h>
+#include <drm/drm_notifier_mi.h>
+#endif
+
 struct regulator *regu_buck;
 
 #ifdef CONFIG_SPI_MT65XX
 extern void mt_spi_enable_master_clk(struct spi_device *spidev);
 extern void mt_spi_disable_master_clk(struct spi_device *spidev);
+#endif
+
+#ifndef FPC_DRM_INTERFACE_WA
+//extern int mtk_dsi_enable_ext_interface(int timeout);
+extern int mtk_drm_early_resume(int timeout);
 #endif
 
 #include "teei_fp.h"
@@ -110,10 +124,14 @@ struct fpc1022_data {
 	char idev_name[32];
 	int event_type;
 	int event_code;
+	atomic_t wakeup_enabled;	/* Used both in ISR and non-ISR */
 	struct mutex lock;
 	bool prepared;
-	bool wakeup_enabled;
+	struct notifier_block fb_notifier;
+	bool fb_black;
+	bool wait_finger_down;
 	struct wakeup_source *ttw_wl;
+	struct work_struct work;
 };
 int fp_idx_ic_exist;
 
@@ -231,6 +249,7 @@ static ssize_t wakeup_enable_set(struct device *dev,
 {
 	struct fpc1022_data *fpc1022 = dev_get_drvdata(dev);
 
+/*
 	if (!strncmp(buf, "enable", strlen("enable"))) {
 		fpc1022->wakeup_enabled = true;
 		smp_wmb();
@@ -239,7 +258,7 @@ static ssize_t wakeup_enable_set(struct device *dev,
 		smp_wmb();
 	} else
 		return -EINVAL;
-
+*/
 	return count;
 }
 
@@ -327,6 +346,26 @@ static ssize_t irq_ack(struct device *device,
 
 static DEVICE_ATTR(irq, S_IRUSR | S_IWUSR, irq_get, irq_ack);
 
+
+static ssize_t fingerdown_wait_set(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct fpc1022_data *fpc1022 = dev_get_drvdata(dev);
+
+	dev_info(fpc1022->dev, "%s -> %s\n", __func__, buf);
+	if (!strncmp(buf, "enable", strlen("enable")))
+		fpc1022->wait_finger_down = true;
+	else if (!strncmp(buf, "disable", strlen("disable")))
+		fpc1022->wait_finger_down = false;
+	else
+		return -EINVAL;
+
+	return count;
+}
+
+static DEVICE_ATTR(fingerdown_wait, S_IWUSR, NULL, fingerdown_wait_set);
+
 static ssize_t fpc_ic_is_exist(struct device *device,
 			       struct device_attribute *attribute, char *buffer)
 {
@@ -348,6 +387,7 @@ static struct attribute *attributes[] = {
 	&dev_attr_clk_enable.attr,
 	&dev_attr_irq.attr,
 	&dev_attr_fpid_get.attr,
+	&dev_attr_fingerdown_wait.attr,
 	NULL
 };
 
@@ -355,22 +395,78 @@ static const struct attribute_group attribute_group = {
 	.attrs = attributes,
 };
 
+#ifndef FPC_DRM_INTERFACE_WA
+static void notification_work(struct work_struct *work)
+{
+	pr_info("%s: fpc fp unblank\n", __func__);
+	mtk_drm_early_resume(FP_UNLOCK_REJECTION_TIMEOUT);
+	//mtk_dsi_enable_ext_interface(FP_UNLOCK_REJECTION_TIMEOUT);
+}
+#endif
+
 static irqreturn_t fpc1022_irq_handler(int irq, void *handle)
 {
 	struct fpc1022_data *fpc1022 = handle;
 
+	dev_dbg(fpc1022->dev, "%s\n", __func__);
+
 	/* Make sure 'wakeup_enabled' is updated before using it
 	 ** since this is interrupt context (other thread...) */
-	smp_rmb();
 
-	/* if (fpc1022->wakeup_enabled) { */
-	__pm_wakeup_event(fpc1022->ttw_wl, msecs_to_jiffies(FPC_TTW_HOLD_TIME));
-	/* } */
+	mutex_lock(&fpc1022->lock);
+	if (atomic_read(&fpc1022->wakeup_enabled)) {
+		__pm_wakeup_event(fpc1022->ttw_wl, msecs_to_jiffies(FPC_TTW_HOLD_TIME));
+	}
+	mutex_unlock(&fpc1022->lock);
 
 	sysfs_notify(&fpc1022->dev->kobj, NULL, dev_attr_irq.attr.name);
 
+	if (fpc1022->wait_finger_down && fpc1022->fb_black) {
+		pr_info("%s enter fingerdown & fb_black then schedule_work\n", __func__);
+		fpc1022->wait_finger_down = false;
+#ifndef FPC_DRM_INTERFACE_WA
+		schedule_work(&fpc1022->work);
+#endif
+	}
+
 	return IRQ_HANDLED;
+
 }
+
+#ifndef FPC_DRM_INTERFACE_WA
+static int fpc_fb_notif_callback(struct notifier_block *nb,
+				 unsigned long event, void *data)
+{
+	struct fpc1022_data *fpc1022 = container_of(nb, struct fpc1022_data,
+						    fb_notifier);
+	struct fb_event *evdata = data;
+	unsigned int blank;
+
+	if (!fpc1022)
+		return 0;
+
+	if (event != DRM_EVENT_BLANK)
+		return 0;
+
+	pr_info("[info] %s value = %d\n", __func__, (int)event);
+
+	if (evdata && evdata->data && event == DRM_EVENT_BLANK) {
+		blank = *(int *)(evdata->data);
+		switch (blank) {
+		case DRM_BLANK_POWERDOWN:
+			fpc1022->fb_black = true;
+			break;
+		case DRM_BLANK_UNBLANK:
+			fpc1022->fb_black = false;
+			break;
+		default:
+			pr_debug("%s defalut\n", __func__);
+			break;
+		}
+	}
+	return NOTIFY_OK;
+}
+#endif
 
 static int fpc1022_platform_probe(struct platform_device *pldev)
 {
@@ -489,7 +585,7 @@ static int fpc1022_platform_probe(struct platform_device *pldev)
 	set_bit(KEY_WAKEUP, fpc1022->idev->keybit);
 	set_bit(KEY_POWER, fpc1022->idev->keybit);
 	ret = input_register_device(fpc1022->idev);
-	fpc1022->wakeup_enabled = false;
+	atomic_set(&fpc1022->wakeup_enabled, 1);
 
 	if (ret) {
 		dev_err(dev, "failed to register input device\n");
@@ -516,13 +612,22 @@ static int fpc1022_platform_probe(struct platform_device *pldev)
 
 	/* Request that the interrupt should be wakeable */
 	enable_irq_wake(fpc1022->irq_num);
-	fpc1022->ttw_wl = wakeup_source_register("fpc_ttw_wl");
+	fpc1022->ttw_wl = wakeup_source_register(dev,"fpc_ttw_wl");
 
 	ret = sysfs_create_group(&dev->kobj, &attribute_group);
 	if (ret) {
 		dev_err(dev, "could not create sysfs\n");
 		goto err_create_sysfs;
 	}
+
+	fpc1022->fb_black = false;
+	fpc1022->wait_finger_down = false;
+
+#ifndef FPC_DRM_INTERFACE_WA
+	INIT_WORK(&fpc1022->work, notification_work);
+	fpc1022->fb_notifier.notifier_call = fpc_fb_notif_callback;
+	drm_register_client(&fpc1022->fb_notifier);
+#endif
 
 	hw_reset(fpc1022);
 	dev_info(dev, "%s: ok\n", __func__);
@@ -556,6 +661,9 @@ static int fpc1022_platform_remove(struct platform_device *pldev)
 
 	dev_info(dev, "%s\n", __func__);
 
+#ifndef FPC_DRM_INTERFACE_WA
+	drm_unregister_client(&fpc1022->fb_notifier);
+#endif
 	sysfs_remove_group(&dev->kobj, &attribute_group);
 
 	mutex_destroy(&fpc1022->lock);

@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -146,9 +145,6 @@ enum {
 	TCP_NOTIFY_REQUEST_BAT_INFO,
 	TCP_NOTIFY_WD_STATUS,
 	TCP_NOTIFY_CABLE_TYPE,
-	TCP_NOTIFY_RA_DETECT,
-	TCP_NOTIFY_WIRELESS_CHARGER,
-	TCP_NOTIFY_TYPEC_OTP,
 	TCP_NOTIFY_PLUG_OUT,
 	TCP_NOTIFY_MISC_END = TCP_NOTIFY_PLUG_OUT,
 };
@@ -308,18 +304,6 @@ struct tcp_ny_cable_type {
 	enum tcpc_cable_type type;
 };
 
-struct tcp_ny_ra_detect {
-	bool detected;
-};
-
-struct tcp_ny_wireless_charger {
-	bool is_wireless_charger;
-};
-
-struct tcp_ny_typec_otp {
-	bool otp;
-};
-
 struct tcp_notify {
 	union {
 		struct tcp_ny_enable_state en_state;
@@ -338,9 +322,6 @@ struct tcp_notify {
 		struct tcp_ny_request_bat request_bat;
 		struct tcp_ny_wd_status wd_status;
 		struct tcp_ny_cable_type cable_type;
-		struct tcp_ny_ra_detect ra_detect;
-		struct tcp_ny_wireless_charger wireless_charger;
-		struct tcp_ny_typec_otp typec_otp;
 	};
 };
 
@@ -563,6 +544,8 @@ enum tcp_dpm_return_code {
 	TCP_DPM_RET_DROP_ERROR_REOCVERY,
 	TCP_DPM_RET_DROP_SEND_BIST,
 	TCP_DPM_RET_DROP_PE_BUSY,	/* SinkTXNg*/
+	TCP_DPM_RET_DROP_DISCARD,
+	TCP_DPM_RET_DROP_UNEXPECTED,
 
 	TCP_DPM_RET_WAIT,
 	TCP_DPM_RET_REJECT,
@@ -898,7 +881,6 @@ extern int tcpm_typec_disable_function(
 
 #ifdef CONFIG_USB_POWER_DELIVERY
 
-extern bool tcpm_check_wireless_vidpid(uint32_t *payload);
 extern bool tcpm_inquire_pd_connected(
 	struct tcpc_device *tcpc_dev);
 
@@ -1152,10 +1134,10 @@ extern int tcpm_update_bat_status_wh_no_mutex(struct tcpc_device *tcpc,
 	enum pd_battery_reference ref, uint8_t status, uint16_t wh);
 
 extern int tcpm_update_bat_status_soc(struct tcpc_device *tcpc,
-	uint8_t status, uint16_t soc);
+	enum pd_battery_reference ref, uint8_t status, uint16_t soc);
 
 extern int tcpm_update_bat_status_soc_no_mutex(struct tcpc_device *tcpc,
-	uint8_t status, uint16_t soc);
+	enum pd_battery_reference ref, uint8_t status, uint16_t soc);
 
 /**
  * tcpm_update_bat_last_full

@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -53,7 +52,6 @@
 #include <linux/proc_fs.h>
 #include <linux/of_fdt.h>	/*of_dt API*/
 #include <linux/of.h>
-#include <linux/of_platform.h> /*of_find_node_by_name*/
 #include <linux/vmalloc.h>
 #include <linux/math64.h>
 #include <linux/alarmtimer.h>
@@ -83,7 +81,6 @@
 #include "simulator_kernel.h"
 #endif
 
-#include <linux/iio/consumer.h>
 
 
 /* ============================================================ */
@@ -359,52 +356,49 @@ bool __attribute__ ((weak)) mt_usb_is_device(void)
 /* ============================================================ */
 /* custom setting */
 /* ============================================================ */
-
-struct iio_channel *channel;
 #ifdef MTK_GET_BATTERY_ID_BY_AUXADC
 void fgauge_get_profile_id(void)
 {
 	int id_volt = 0;
 	int id = 0;
 	int ret = 0;
-	int auxadc_voltage;
+	int auxadc_voltage = 0;
+	struct iio_channel *channel;
 	struct device_node *batterty_node;
 	struct platform_device *battery_dev;
 
 	batterty_node = of_find_node_by_name(NULL, "battery");
-	if (!batterty_node)
-		bm_err("[%s] find battery node fail \n", __func__);
-	else
-		bm_err("[%s] find battery node success \n", __func__);
+	if (!batterty_node) {
+		bm_err("[%s] of_find_node_by_name fail\n", __func__);
+		return;
+	}
 
 	battery_dev = of_find_device_by_node(batterty_node);
-	if (!battery_dev)
-		bm_err("[%s] find battery dev fail \n", __func__);
-	else
-		bm_err("[%s] find battery dev success \n", __func__);
+	if (!battery_dev) {
+		bm_err("[%s] of_find_device_by_node fail\n", __func__);
+		return;
+	}
 
 	channel = iio_channel_get(&(battery_dev->dev), "batteryID-channel");
 	if (IS_ERR(channel)) {
 		ret = PTR_ERR(channel);
 		bm_err("[%s] iio channel not found %d\n",
 		__func__, ret);
-	} else {
-		bm_err("[%s] get channel success\n", __func__);
+		return;
 	}
 
 	if (channel)
-		ret = iio_read_channel_processed(channel,&auxadc_voltage);
-	else
-		bm_err("[%s] no channel to processed \n", __func__);
+		ret = iio_read_channel_processed(channel, &auxadc_voltage);
+
 
 	if (ret <= 0) {
-		bm_err("[%s] IIO channel read failed %d \n", __func__, ret);
-	} else {
-		bm_err("[%s] auxadc_voltage is %d\n", __func__, auxadc_voltage);
-		id_volt = auxadc_voltage * 1500 / 4096;
-		id_volt = id_volt * 1000;
-		bm_err("[%s] battery_id_voltage is %d\n", __func__, id_volt);
+		bm_err("[%s] iio_read_channel_processed failed\n", __func__);
+		return;
 	}
+
+	bm_err("[%s]auxadc_voltage is %d\n", __func__, auxadc_voltage);
+	id_volt = auxadc_voltage * 1500 / 4096;
+	bm_err("[%s]battery_id_voltage is %d\n", __func__, id_volt);
 
 	if ((sizeof(g_battery_id_voltage) /
 		sizeof(int)) != TOTAL_BATTERY_NUMBER) {
@@ -426,23 +420,6 @@ void fgauge_get_profile_id(void)
 		__func__,
 		gm.battery_id);
 }
-
-int battery_get_bat_resistance_id(void)
-{
-	int auxadc_voltage;
-	int id_volt;
-
-	if (channel) {
-		iio_read_channel_processed(channel, &auxadc_voltage);
-	} else {
-		bm_err("[%s] no channel to processed \n", __func__);
-	}
-
-	id_volt = auxadc_voltage * 1500 / 4096;
-
-	return id_volt;
-}
-
 #elif defined(MTK_GET_BATTERY_ID_BY_GPIO)
 void fgauge_get_profile_id(void)
 {
@@ -2141,9 +2118,6 @@ void fg_bat_plugout_int_handler(void)
 		for (i = 0 ; i < 20 ; i++)
 			gauge_dev_dump(gm.gdev, NULL, 0);
 
-		/* TODO debug purpose, remove it!!!!!! */
-		aee_kernel_warning("GAUGE", "BAT_PLUGOUT error!\n");
-
 		if (gm.plug_miss_count >= 3) {
 			gauge_enable_interrupt(FG_BAT_PLUGOUT_NO, 0);
 			bm_err("[%s]disable FG_BAT_PLUGOUT\n",
@@ -2704,6 +2678,36 @@ void fg_daemon_comm_INT_data(char *rcv, char *ret)
 			gm.is_reset_aging_factor = 0;
 		}
 		break;
+	case FG_GET_SOC_DECIMAL_RATE:
+		{
+			int decimal_rate = gm.soc_decimal_rate;
+
+			memcpy(&pret->output,
+				&decimal_rate, sizeof(decimal_rate));
+			bm_debug("[FG_GET_SOC_DECIMAL_RATE]soc_decimal_rate:%d %d\n",
+				decimal_rate, gm.soc_decimal_rate);
+		}
+		break;
+	case FG_GET_DIFF_SOC_SET:
+		{
+			/* 1 = 0.01%, 50 = 0.5% */
+			int soc_setting = 1;
+
+			memcpy(&pret->output,
+				&soc_setting, sizeof(soc_setting));
+		}
+		break;
+	case FG_GET_IS_FORCE_FULL:
+		{
+			/* 1 = trust customer full condition */
+			/* 0 = using gauge ori full flow */
+			int force_full = gm.is_force_full;
+
+			memcpy(&pret->output,
+				&force_full, sizeof(force_full));
+		}
+		break;
+
 	case FG_SET_SOC:
 		{
 			gm.soc = (prcv->input + 50) / 100;
@@ -2783,6 +2787,16 @@ void fg_daemon_comm_INT_data(char *rcv, char *ret)
 
 			bm_err("set GAUGE_MONITOR_SOFF_VALIDTIME ori:%d, new:%d\n",
 				ori_value, prcv->input);
+		}
+		break;
+	case FG_SET_ZCV_INTR_EN:
+		{
+			int zcv_intr_en = prcv->input;
+
+			if (zcv_intr_en == 0 || zcv_intr_en == 1)
+				gauge_set_zcv_interrupt_en(zcv_intr_en);
+
+			bm_err("set zcv_interrupt_en %d\n", zcv_intr_en);
 		}
 		break;
 	default:
@@ -3096,6 +3110,7 @@ void bmd_ctrl_cmd_from_user(void *nl_data, struct fgd_nl_msg_t *ret_msg)
 		{
 			unsigned int ptim_bat_vol = 0;
 			signed int ptim_R_curr = 0;
+			int curr_bat_vol = 0;
 
 			if (gm.init_flag == 1) {
 				_do_ptim();
@@ -3106,8 +3121,15 @@ void bmd_ctrl_cmd_from_user(void *nl_data, struct fgd_nl_msg_t *ret_msg)
 			} else {
 				ptim_bat_vol = gm.ptim_lk_v;
 				ptim_R_curr = gm.ptim_lk_i;
-				bm_warn("[fr] PTIM_LK V %d I %d\n",
-					ptim_bat_vol, ptim_R_curr);
+
+				curr_bat_vol =
+					battery_get_bat_voltage() * 10;
+				if (gm.ptim_lk_v == 0)
+					ptim_bat_vol = curr_bat_vol;
+
+				bm_err("[fr] PTIM_LK V %d I %d,curr_bat_vol=%d\n",
+					ptim_bat_vol, ptim_R_curr,
+					curr_bat_vol);
 			}
 			ptim_vbat = ptim_bat_vol;
 			ptim_i = ptim_R_curr;

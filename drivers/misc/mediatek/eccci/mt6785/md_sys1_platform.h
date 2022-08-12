@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -32,6 +31,7 @@ struct md_pll_reg {
 struct md_hw_info {
 	/* HW info - Register Address */
 	unsigned long md_rgu_base;
+	unsigned long l1_rgu_base;
 	unsigned long md_boot_slave_Vector;
 	unsigned long md_boot_slave_Key;
 	unsigned long md_boot_slave_En;

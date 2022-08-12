@@ -24,6 +24,44 @@
 /*CUR,DEFAULT,MIN,MAX*/
 #define VALUE_TYPE_SIZE 6
 #define VALUE_GRIP_SIZE 9
+
+/* Xiaomi Touch driver log level
+ * error    : 0
+ * info     : 1
+ * notice   : 2
+ * debug    : 3
+ */
+extern int mi_log_level;
+
+#define TOUCH_ERROR	0
+#define TOUCH_INFO	1
+#define TOUCH_NOTICE	2
+#define TOUCH_DEBUG	3
+
+#define MI_TOUCH_LOGE(level, fmt, args...)\
+do {\
+	if (level == 1)\
+		pr_err(fmt"\n", ##args);\
+} while(0)
+
+#define MI_TOUCH_LOGI(level, fmt, args...)\
+do {\
+	if (mi_log_level >= TOUCH_INFO && level == 1)\
+		pr_info(fmt"\n", ##args);\
+} while(0)
+
+#define MI_TOUCH_LOGN(level, fmt, args...)\
+do {\
+	if (mi_log_level >= TOUCH_NOTICE && level == 1)\
+		pr_info(fmt"\n", ##args);\
+} while(0)
+
+#define MI_TOUCH_LOGD(level, fmt, args...)\
+do {\
+	if (mi_log_level == TOUCH_DEBUG && level == 1)\
+		pr_info(fmt"\n", ##args);\
+} while(0)
+
 enum MODE_CMD {
 	SET_CUR_VALUE = 0,
 	GET_CUR_VALUE,
@@ -48,7 +86,14 @@ enum  MODE_TYPE {
 	Touch_Fod_Enable       = 10,
 	Touch_Aod_Enable       = 11,
 	Touch_Resist_RF        = 12,
-	Touch_Mode_NUM         = 13,
+	Touch_Idle_Time        = 13,
+	Touch_Doubletap_Mode   = 14,
+	Touch_Grip_Mode        = 15,
+	Touch_FodIcon_Enable   = 16,
+	Touch_Nonui_Mode       = 17,
+	Touch_Debug_Level      = 18,
+	Touch_Power_Status     = 19,
+	Touch_Mode_NUM         = 20,
 };
 
 struct xiaomi_touch_interface {
@@ -62,6 +107,10 @@ struct xiaomi_touch_interface {
 	int (*p_sensor_write)(int on);
 	int (*palm_sensor_read)(void);
 	int (*palm_sensor_write)(int on);
+	char (*touch_vendor_read)(void);
+	char (*panel_vendor_read)(void);
+	char (*panel_color_read)(void);
+	char (*panel_display_read)(void);
 };
 
 struct xiaomi_touch {

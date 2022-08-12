@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2018 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -2014,9 +2013,7 @@ static int fgauge_get_nag_c_dltv(
 			bcheckbit10, NAG_C_DLTV_value_H, NAG_C_DLTV_value,
 			g_nag_corner);
 		return 0;
-	}
-
-	if (g_nag_corner == 2) {
+	} else if (g_nag_corner == 2) {
 		NAG_C_DLTV_reg_value = (NAG_C_DLTV_value - 32768);
 		NAG_C_DLTV_mV_value =
 			REG_to_MV_value(NAG_C_DLTV_reg_value);
@@ -3147,7 +3144,6 @@ int nafg_check_corner(struct gauge_device *gauge_dev)
 	bool bcheckbit10;
 	int nag_zcv = nag_zcv_mv;
 
-	g_nag_corner = 0;
 	setto_cdltv_thr_mv = nag_c_dltv_mv;
 
 	/*AUXADC_NAG_7*/
@@ -3170,13 +3166,13 @@ int nafg_check_corner(struct gauge_device *gauge_dev)
 	get_c_dltv_mv = REG_to_MV_value(NAG_C_DLTV_reg_value);
 	fgauge_get_nag_vbat(gauge_dev, &nag_vbat);
 
+	g_nag_corner = 0;
+
 	if (nag_vbat < 31500 && nag_zcv > 31500)
 		g_nag_corner = 1;
-
-	if (nag_zcv < 31500 && nag_vbat > 31500)
+	else if (nag_zcv < 31500 && nag_vbat > 31500)
 		g_nag_corner = 2;
-
-	if (nag_zcv < 31500 && nag_vbat < 31500)
+	else
 		g_nag_corner = 0;
 
 

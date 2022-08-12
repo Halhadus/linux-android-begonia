@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -15,7 +14,6 @@
 #include <linux/errno.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
-#include <linux/power_supply.h>
 #include "mtk_charger_intf.h"
 
 #define PD_VBUS_IR_DROP_THRESHOLD 1200
@@ -124,18 +122,14 @@ end:
 
 static bool mtk_is_pdc_ready(struct charger_manager *info)
 {
-	struct mt_charger	*mt_chg = power_supply_get_drvdata(info->usb_psy);
-
 	if (info->pd_type == MTK_PD_CONNECT_PE_READY_SNK ||
-		info->pd_type == MTK_PD_CONNECT_PE_READY_SNK_PD30) {
-		mt_chg->usb_desc.type = POWER_SUPPLY_TYPE_USB_PD;
+		info->pd_type == MTK_PD_CONNECT_PE_READY_SNK_PD30)
 		return true;
-	}
+
 	if (info->pd_type == MTK_PD_CONNECT_PE_READY_SNK_APDO &&
-		info->enable_pe_4 == false) {
-		mt_chg->usb_desc.type = POWER_SUPPLY_TYPE_USB_PD;
+		info->enable_pe_4 == false &&
+		info->enable_pe_5 == false)
 		return true;
-	}
 
 	return false;
 }
@@ -358,8 +352,6 @@ int mtk_pdc_setup(struct charger_manager *info, int idx)
 		}
 
 		mtk_pdc_get_idx(info, idx, &pd->pd_boost_idx, &pd->pd_buck_idx);
-
-		msleep(info->data.set_cap_delay);
 	}
 
 	chr_err("[%s]idx:%d:%d:%d:%d vbus:%d cur:%d ret:%d\n", __func__,
@@ -445,7 +437,7 @@ int mtk_pdc_get_setting(struct charger_manager *info, int *newvbus, int *newcur,
 	int ibat = 0, chg1_ibat = 0, chg2_ibat = 0;
 	int chg2_watt = 0;
 	bool boost = false, buck = false;
-	struct adapter_power_cap *cap;
+	struct adapter_power_cap *cap = NULL;
 	unsigned int mivr1 = 0;
 	unsigned int mivr2 = 0;
 	bool chg1_mivr = false;
@@ -491,28 +483,6 @@ int mtk_pdc_get_setting(struct charger_manager *info, int *newvbus, int *newcur,
 			__func__, chg2_watt, chg2_ibat, chg1_ibat, ibat * 100);
 	}
 
-	if (info->data.parallel_vbus) {
-		ret = charger_dev_get_ibat(info->chg1_dev, &chg1_ibat);
-		if (ret < 0) {
-			chr_err("[%s] get ibat fail\n", __func__);
-		}
-
-		ret = charger_dev_get_ibat(info->chg2_dev, &chg2_ibat);
-		if (ret < 0) {
-			ibat = battery_get_bat_current();
-			chg2_ibat = ibat * 100 - chg1_ibat;
-		}
-
-		if (ibat < 0 || chg2_ibat < 0)
-			chg2_watt = 0;
-		else
-			chg2_watt = chg2_ibat / 1000 * battery_get_bat_voltage()
-					/ info->data.chg2_eff * 100;
-
-		chr_err("[%s] chg2_watt:%d ibat2:%d ibat1:%d ibat:%d\n",
-			__func__, chg2_watt, chg2_ibat, chg1_ibat, ibat * 100);
-	}
-
 	charger_dev_get_mivr_state(info->chg1_dev, &chg1_mivr);
 	charger_dev_get_mivr(info->chg1_dev, &mivr1);
 
@@ -535,7 +505,7 @@ int mtk_pdc_get_setting(struct charger_manager *info, int *newvbus, int *newcur,
 	idx = selected_idx;
 
 	if (idx < 0 || idx >= ADAPTER_CAP_MAX_NR)
-		idx = 0;
+		idx = selected_idx = 0;
 
 	pd_max_watt = cap->max_mv[idx] * (cap->ma[idx]
 			/ 100 * (100 - info->data.ibus_err) - 100);

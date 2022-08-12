@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -45,6 +44,7 @@
 #include "vpu_drv.h"
 #include "vpu_cmn.h"
 #include "vpu_dbg.h"
+#include "vpu_dump.h"
 
 #ifdef CONFIG_COMPAT
 /* 64 bit */
@@ -53,6 +53,7 @@
 #endif
 
 #define VPU_DEV_NAME            "vpu"
+//#define VPU_LOAD_FW_SUPPORT
 
 static struct vpu_device *vpu_device;
 static struct wakeup_source vpu_wake_lock;
@@ -314,10 +315,11 @@ int vpu_put_request_to_pool(struct vpu_user *user, struct vpu_request *req)
 				LOG_WRN("[vpu_drv] %s=0x%p failed and return\n",
 					"import ion handle", handle);
 				for (k = 0; k < cnt; k++) {
+					if (!req->buf_ion_infos[k])
+						continue;
 					ion_free(my_ion_client,
 						(struct ion_handle *)
 						(req->buf_ion_infos[k]));
-					LOG_WRN("free cnt[%d] ion handle\n", k);
 				}
 				return -EINVAL;
 			} else {
@@ -1310,6 +1312,7 @@ static long vpu_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
 	}
 		case VPU_IOCTL_CREATE_ALGO:
 	{
+#ifdef VPU_LOAD_FW_SUPPORT
 		struct vpu_create_algo *u_create_algo;
 		struct vpu_create_algo create_algo = {0};
 
@@ -1351,11 +1354,15 @@ static long vpu_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
 		}
 
 		vpu_add_algo_to_user(user, &create_algo);
-
+#else
+		ret = -EINVAL;
+		LOG_WRN("[CREATE_ALGO] was not support!\n");
+#endif
 		break;
 	}
 	case VPU_IOCTL_FREE_ALGO:
 	{
+#ifdef VPU_LOAD_FW_SUPPORT
 		struct vpu_create_algo *u_create_algo;
 		struct vpu_create_algo create_algo = {0};
 
@@ -1381,7 +1388,10 @@ static long vpu_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
 		create_algo.name[(sizeof(char)*32) - 1] = '\0';
 
 		vpu_free_algo_from_user(user, &create_algo);
-
+#else
+		ret = -EINVAL;
+		LOG_WRN("[FREE_ALGO] was not support!\n");
+#endif
 		break;
 	}
 
@@ -1660,7 +1670,7 @@ static int vpu_mmap(struct file *flip, struct vm_area_struct *vma)
 static dev_t vpu_devt;
 static struct cdev *vpu_chardev;
 static struct class *vpu_class;
-static int vpu_num_devs;
+static unsigned int vpu_num_devs;
 
 static inline void vpu_unreg_chardev(void)
 {
@@ -1715,7 +1725,7 @@ out:
 static int vpu_probe(struct platform_device *pdev)
 {
 	int ret = 0;
-	int core = 0;
+	unsigned int core = 0;
 	struct device *dev;
 	struct device_node *node;
 	unsigned int irq_info[3] = {0};
@@ -1897,6 +1907,8 @@ out:
 			vpu_unreg_chardev();
 	}
 
+	vpu_dmp_init(core);
+
 	LOG_DBG("probe vpu driver\n");
 
 	return ret;
@@ -1933,6 +1945,9 @@ static int vpu_remove(struct platform_device *pDev)
 	device_destroy(vpu_class, vpu_devt);
 	class_destroy(vpu_class);
 	vpu_class = NULL;
+
+	for (i = 0 ; i < MTK_VPU_CORE ; i++)
+		vpu_dmp_exit(i);
 	return 0;
 }
 
@@ -1949,6 +1964,29 @@ static int vpu_suspend(struct platform_device *pdev, pm_message_t mesg)
 static int vpu_resume(struct platform_device *pdev)
 {
 	return 0;
+}
+
+unsigned long vpu_bin_base(void)
+{
+	return (vpu_device) ? vpu_device->bin_base : 0;
+}
+
+unsigned long vpu_ctl_base(int core)
+{
+	if (core < 0 || core >= MTK_VPU_CORE || !vpu_device)
+		return 0;
+
+	return vpu_device->vpu_base[core];
+}
+
+unsigned long vpu_syscfg_base(void)
+{
+	return vpu_device->vpu_syscfg_base;
+}
+
+unsigned long vpu_vcore_base(void)
+{
+	return vpu_device->vpu_vcorecfg_base;
 }
 
 static int __init VPU_INIT(void)

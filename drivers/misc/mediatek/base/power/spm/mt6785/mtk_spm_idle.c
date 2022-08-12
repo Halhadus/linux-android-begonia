@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -59,7 +58,6 @@ static unsigned int idle_pcm_flags[IDLE_MODEL_NUM] = {
 		SPM_FLAG_DISABLE_INFRA_PDN |
 		SPM_FLAG_DISABLE_VCORE_DVS |
 		SPM_FLAG_DISABLE_VCORE_DFS |
-		SPM_FLAG_DISABLE_BUS_CLK_OFF |
 		SPM_FLAG_KEEP_CSYSPWRUPACK_HIGH |
 		SPM_FLAG_ENABLE_LVTS_CONTROL,
 
@@ -70,7 +68,6 @@ static unsigned int idle_pcm_flags[IDLE_MODEL_NUM] = {
 		SPM_FLAG_DISABLE_INFRA_PDN |
 		SPM_FLAG_DISABLE_VCORE_DVS |
 		SPM_FLAG_DISABLE_VCORE_DFS |
-		SPM_FLAG_DISABLE_BUS_CLK_OFF |
 		SPM_FLAG_KEEP_CSYSPWRUPACK_HIGH |
 		SPM_FLAG_USE_SRCCLKENO2,
 
@@ -81,7 +78,6 @@ static unsigned int idle_pcm_flags[IDLE_MODEL_NUM] = {
 		SPM_FLAG_DISABLE_INFRA_PDN |
 		SPM_FLAG_DISABLE_VCORE_DVS |
 		SPM_FLAG_DISABLE_VCORE_DFS |
-		SPM_FLAG_DISABLE_BUS_CLK_OFF |
 		SPM_FLAG_KEEP_CSYSPWRUPACK_HIGH,
 };
 

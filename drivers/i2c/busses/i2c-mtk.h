@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2014 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Author: Xudong.chen <xudong.chen@mediatek.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -98,6 +98,10 @@
 #define I2C_DMA_WARM_RST		0x0001
 #define I2C_DMA_4G_MODE		0x0001
 
+#define I2C_DMA_DIR_CHANGE              (0x1 << 9)
+#define I2C_DMA_SKIP_CONFIG             (0x1 << 4)
+#define I2C_DMA_ASYNC_MODE              (0x1 << 2)
+
 #define I2C_DEFAUT_SPEED		100000/* hz */
 #define MAX_FS_MODE_SPEED		400000/* hz */
 #define MAX_FS_PLUS_MODE_SPEED          1000000/* hz */
@@ -117,6 +121,7 @@
 #define I2C_CONTROL_DIR_CHANGE	(0x1 << 4)
 #define I2C_CONTROL_ACKERR_DET_EN	(0x1 << 5)
 #define I2C_CONTROL_TRANSFER_LEN_CHANGE (0x1 << 6)
+#define I2C_CONTROL_IRQ_SEL     (0x1 << 7)
 #define I2C_CONTROL_DMAACK_EN	(0x1 << 8)
 #define I2C_CONTROL_ASYNC_MODE	(0x1 << 9)
 #define I2C_CONTROL_WRAPPER		(0x1 << 0)
@@ -132,6 +137,13 @@
 
 #define I2C_DRV_NAME		"mt-i2c"
 #define I2CTAG					"[I2C]"
+
+enum {
+	DMA_HW_VERSION0 = 0,
+	DMA_HW_VERSION1 = 1,
+	MDA_SUPPORT_8G  = 2,
+	DMA_SUPPORT_64G = 3,
+};
 
 enum DMA_REGS_OFFSET {
 	OFFSET_INT_FLAG = 0x0,
@@ -336,15 +348,26 @@ struct mtk_i2c_compatible {
 	unsigned char set_ltiming;/* need to set LTIMING */
 	unsigned char set_aed;/* need to set AED */
 	unsigned char ver;/* controller version */
+	unsigned char dma_ver;/* dma controller version */
 	/* for constraint of SAMPLE_CNT_DIV and STEP_CNT_DIV of mt6765 */
 	/* 1, has-a-constraint; 0, no constraint */
 	unsigned char cnt_constraint;
+	/* only for MT6768 */
+	/* this option control defined when nack error or ack error occurs */
+	/* 0 : disable, 1 : enable*/
+	unsigned char control_irq_sel;
 	u16 ext_time_config;
 	char clk_compatible[128];
 	u16 clk_sta_offset[I2C_MAX_CHANNEL];/* I2C clock status register */
 	u8 cg_bit[I2C_MAX_CHANNEL];/* i2c clock bit */
 	u32 clk_sel_offset;
 	u32 arbit_offset;
+};
+
+struct mtk_i2c_pll {
+	struct clk *clk_mux;/* clock top i2c sel for i2c bus */
+	struct clk *clk_p_main;/* clock top i2c pll main for i2c bus */
+	struct clk *clk_p_univ;/* clock top i2c pll univ for i2c bus */
 };
 
 struct mt_i2c {
@@ -354,8 +377,16 @@ struct mt_i2c {
 	/* set in i2c probe */
 	void __iomem *base;/* i2c base addr */
 	void __iomem *pdmabase;/* dma base address*/
+	void __iomem *gpiobase;/* gpio base address */
 	int irqnr;	/* i2c interrupt number */
 	int id;
+	int scl_gpio_id; /* SCL GPIO number */
+	int sda_gpio_id; /* SDA GPIO number */
+	unsigned int gpio_start;
+	unsigned int mem_len;
+	unsigned int offset_eh_cfg;
+	unsigned int offset_pu_cfg;
+	unsigned int offset_rsel_cfg;
 	struct i2c_dma_buf dma_buf;/* memory alloc for DMA mode */
 	struct clk *clk_main;/* main clock for i2c bus */
 	struct clk *clk_dma;/* DMA clock for i2c via DMA */
@@ -369,6 +400,7 @@ struct mt_i2c {
 	bool gpupm;/* I2C for GPUPM */
 	bool buffermode;	/* I2C Buffer mode support */
 	bool hs_only;	/* I2C HS only */
+	bool fifo_only;  /* i2c fifo mode only, does not have dma HW support */
 	/* set when doing the transfer */
 	u16 irq_stat;	/* interrupt status */
 	u16 i3c_en;     /* i3c enalbe */
@@ -378,6 +410,7 @@ struct mt_i2c {
 	spinlock_t cg_lock;
 	int cg_cnt;
 	bool trans_stop;/* i2c transfer stop */
+	bool i2c_m_ignore_nak;/* i2c master ignore no ack*/
 	enum mt_trans_op op;
 	u16 total_len;
 	u16 msg_len;
@@ -404,6 +437,7 @@ struct mt_i2c {
 	struct mutex i2c_mutex;
 	struct mt_i2c_ext ext_data;
 	const struct mtk_i2c_compatible *dev_comp;
+	struct mtk_i2c_pll *i2c_pll_info;
 	struct i2c_info rec_info[I2C_RECORD_LEN];
 };
 
@@ -418,7 +452,7 @@ struct mt_i2c {
 /* Hz for FPGA I2C work frequency */
 #endif
 
-
+extern void gpio_dump_regs_range(int start, int end);
 extern void i2c_dump_info(struct mt_i2c *i2c);
 #if defined(CONFIG_MTK_GIC_EXT)
 extern void mt_irq_dump_status(unsigned int irq);

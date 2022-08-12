@@ -37,15 +37,22 @@ struct mt6360_chg_platform_data {
 	const char *chg_name;
 };
 
+/* MT6360_PMU_CORE_CTRL2 : 0x06 */
+#define MT6360_MASK_SHIP_RST_DIS	BIT(0)
+
 /* MT6360_PMU_CHG_CTRL1 : 0x11 */
 #define MT6360_MASK_FORCE_SLEEP	BIT(3)
 #define MT6360_SHFT_FORCE_SLEEP	(3)
+#define MT6360_MASK_HZ_EN	BIT(2)
+#define MT6360_SHFT_HZ_EN	(2)
 #define MT6360_MASK_OPA_MODE	BIT(0)
 #define MT6360_SHFT_OPA_MODE	(0)
 
 /* MT6360_PMU_CHG_CTRL2 : 0x12 */
+#define MT6360_MASK_SHIP_MODE	BIT(7)
 #define MT6360_MASK_IINLMTSEL	(0x0C)
 #define MT6360_SHFT_IINLMTSEL	(2)
+#define MT6360_MASK_BYPASS_MODE	BIT(5)
 #define MT6360_MASK_TE_EN	BIT(4)
 #define MT6360_SHFT_TE_EN	(4)
 #define MT6360_MASK_CFO_EN	BIT(1)
@@ -87,6 +94,10 @@ struct mt6360_chg_platform_data {
 #define MT6360_MASK_OTG_OC	(0x07)
 #define MT6360_SHFT_OTG_OC	(0)
 #define MT6360_OTG_OC_MAXVAL	(0x07)
+
+/* MT6360_PMU_CHG_CTRL11 : 0x1B */
+#define MT6360_MASK_VRECH	(0x03)
+#define MT6360_SHFT_VRECH	(0)
 
 /* MT6360_PMU_CHG_CTRL12 : 0x1C */
 #define MT6360_MASK_TMR_EN	BIT(1)

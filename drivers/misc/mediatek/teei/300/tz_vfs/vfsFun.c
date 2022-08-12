@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2019, MICROTRUST Incorporated
+ * Copyright (C) 2021 XiaoMi, Inc.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -27,6 +28,7 @@
 #include <linux/semaphore.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/sched/types.h>
 #include <teei_ioc.h>
 #include "TEEI.h"
 #include "teei_id.h"
@@ -47,11 +49,7 @@
 
 #define GET_FP_VENDOR_CMD _IOWR(TEEI_CONFIG_IOC_MAGIC, 0x80, int)
 
-#ifdef CONFIG_MICROTRUST_TUI_DRIVER
-int enter_tui_flag;
-#else
 int enter_tui_flag = 1;
-#endif
 
 static int vfs_major = VFS_MAJOR;
 static struct class *driver_class;
@@ -72,8 +70,31 @@ DECLARE_COMPLETION(VFS_wr_comp);
 
 struct vfs_dev *vfs_devp;
 
-int tz_vfs_open(struct inode *inode, struct file *filp)
+int wait_for_vfs_done(void)
 {
+#ifdef VFS_RDWR_SEM
+	down_interruptible(&VFS_wr_sem);
+#else
+	wait_for_completion_interruptible(&VFS_wr_comp);
+#endif
+	return 0;
+}
+
+int notify_vfs_handle(void)
+{
+#ifdef VFS_RDWR_SEM
+	up(&VFS_rd_sem);
+#else
+	complete(&VFS_rd_comp);
+#endif
+	return 0;
+}
+
+
+static int tz_vfs_open(struct inode *inode, struct file *filp)
+{
+	struct sched_param param = {.sched_priority = 52 };
+
 	if (vfs_devp == NULL)
 		return -EINVAL;
 
@@ -84,10 +105,13 @@ int tz_vfs_open(struct inode *inode, struct file *filp)
 		return -EINVAL;
 
 	filp->private_data = vfs_devp;
+
+	sched_setscheduler_nocheck(current, SCHED_FIFO, &param);
+
 	return 0;
 }
 
-int tz_vfs_release(struct inode *inode, struct file *filp)
+static int tz_vfs_release(struct inode *inode, struct file *filp)
 {
 	filp->private_data = NULL;
 	return 0;
@@ -100,38 +124,6 @@ static long tz_vfs_ioctl(struct file *filp,
 	int fp_vendor;
 
 	switch (cmd) {
-#ifdef CONFIG_MICROTRUST_TUI_DRIVER
-	case SOTER_TUI_ENTER:
-		IMSG_DEBUG("***************SOTER_TUI_ENTER\n");
-		enter_tui_flag = 1;
-		ret = tui_i2c_enable_clock();
-		if (ret)
-			IMSG_ERROR("tui_i2c_enable_clock failed!!\n");
-
-		mt_deint_leave();
-
-		ret = display_enter_tui();
-		if (ret)
-			IMSG_ERROR("display_enter_tui failed!!\n");
-
-		break;
-
-	case SOTER_TUI_LEAVE:
-		IMSG_DEBUG("***************SOTER_TUI_LEAVE\n");
-
-		ret = tui_i2c_disable_clock();
-		if (ret)
-			IMSG_ERROR("tui_i2c_disable_clock failed!!\n");
-
-		mt_deint_restore();
-
-		ret = display_exit_tui();
-		if (ret)
-			IMSG_ERROR("display_exit_tui failed!!\n");
-		/* primary_display_trigger(0, NULL, 0); */
-		enter_tui_flag = 0;
-		break;
-#endif
 	case GET_FP_VENDOR_CMD:
 		fp_vendor = get_fp_vendor();
 		ret = copy_to_user((void *)arg, &fp_vendor, sizeof(int));
@@ -167,9 +159,8 @@ static ssize_t tz_vfs_read(struct file *filp, char __user *buf,
 	ret = wait_for_completion_interruptible(&VFS_rd_comp);
 
 	if (ret == -ERESTARTSYS) {
-		IMSG_DEBUG("[%s][%d] wait_for_completion was interrupt\n",
+		IMSG_ERROR("[%s][%d] wait_for_completion was interrupt\n",
 				__func__, __LINE__);
-		complete(&global_down_lock);
 		return ret;
 	}
 #endif
@@ -289,10 +280,7 @@ static void vfs_setup_cdev(struct vfs_dev *dev, int index)
 		IMSG_ERROR("Error %d adding socket %d.\n", err, index);
 }
 
-
-
-
-int vfs_init(void)
+static int vfs_init(void)
 {
 	int result = 0;
 	struct device *class_dev = NULL;
@@ -348,7 +336,7 @@ return_fn:
 	return result;
 }
 
-void vfs_exit(void)
+static void vfs_exit(void)
 {
 	device_destroy(driver_class, devno);
 	class_destroy(driver_class);

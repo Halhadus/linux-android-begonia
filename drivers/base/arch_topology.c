@@ -2,7 +2,6 @@
  * Arch specific cpu topology information
  *
  * Copyright (C) 2016, ARM Ltd.
- * Copyright (C) 2020 XiaoMi, Inc.
  * Written by: Juri Lelli, ARM Ltd.
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -201,7 +200,7 @@ int detect_share_cap_flag(void)
 	struct cpufreq_policy *policy;
 
 	for_each_possible_cpu(cpu) {
-		policy = cpufreq_cpu_get_raw(cpu);
+		policy = cpufreq_cpu_get(cpu);
 
 		if (!policy)
 			return 0;
@@ -371,11 +370,7 @@ static void update_topology_flags_workfn(struct work_struct *work)
 static u32 capacity_scale;
 static u32 *raw_capacity;
 
-#if defined(CONFIG_MACH_MT6739)
 static int free_raw_capacity(void)
-#else
-static int __init free_raw_capacity(void)
-#endif
 {
 	kfree(raw_capacity);
 	raw_capacity = NULL;

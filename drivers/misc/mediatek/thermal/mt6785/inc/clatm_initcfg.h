@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -61,8 +61,6 @@
 #define CLATM_INIT_CFG_PHPB_GPU_TP		(80)
 
 #define CLATM_INIT_HRTIMER_POLLING_DELAY	(50)
-
-#define CLATM_USE_MIN_CPU_OPP			(1)
 
 #define CLATM_USE_MIN_CPU_OPP			(1)
 

@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -87,8 +86,6 @@ int mtk_pe40_pd_1st_request(struct charger_manager *pinfo,
 
 	ret = adapter_dev_set_cap(pinfo->pd_adapter, MTK_PD_APDO_START,
 		adapter_mv, adapter_ma);
-	//ret = tcpm_set_apdo_charging_policy(pinfo->tcpc,
-	//		DPM_CHARGING_POLICY_PPS, adapter_mv, adapter_ma, NULL);
 
 	if (pinfo->data.parallel_vbus && (oldmA * 2 < ma)) {
 		if (chg2_enable) {
@@ -108,9 +105,6 @@ int mtk_pe40_pd_1st_request(struct charger_manager *pinfo,
 	mtk_pe40_set_mivr(pinfo, mivr * 1000);
 
 	pinfo->pe4.pe4_input_current_limit_setting = ma * 1000;
-
-	msleep(pinfo->data.set_cap_delay);
-
 	return ret;
 }
 
@@ -122,7 +116,7 @@ int mtk_pe40_pd_request(struct charger_manager *pinfo,
 	int ret;
 	int mivr;
 	int adapter_mv, adapter_ma;
-	struct mtk_pe40 *pe40;
+	struct mtk_pe40 *pe40 = NULL;
 	bool chg2_enable = false;
 
 	if (is_dual_charger_supported(pinfo))
@@ -199,9 +193,6 @@ int mtk_pe40_pd_request(struct charger_manager *pinfo,
 	mtk_pe40_set_mivr(pinfo, mivr * 1000);
 
 	pinfo->pe4.pe4_input_current_limit_setting = ma * 1000;
-
-	msleep(pinfo->data.set_cap_delay);
-
 	return ret;
 
 err:
@@ -218,9 +209,6 @@ err:
 		charger_dev_set_input_current(pinfo->chg1_dev, ma * 1000);
 
 	mtk_pe40_set_mivr(pinfo, oldmivr);
-
-	msleep(pinfo->data.set_cap_delay);
-
 	return ret;
 }
 
@@ -232,8 +220,6 @@ void mtk_pe40_reset(struct charger_manager *pinfo, bool enable)
 	pe40 = &pinfo->pe4;
 
 	if (pe40->is_connect == true) {
-		//tcpm_set_pd_charging_policy(pinfo->tcpc,
-		//	DPM_CHARGING_POLICY_VSAFE5V, NULL);
 		adapter_dev_set_cap(pinfo->pd_adapter, MTK_PD_APDO_END,
 			5000, 2000);
 
@@ -269,17 +255,6 @@ void mtk_pe40_end(struct charger_manager *pinfo, int type, bool retry)
 		mtk_pe40_reset(pinfo, retry);
 		chr_err("%s:%d retry:%d\n", __func__, type, retry);
 	}
-}
-
-
-bool mtk_is_TA_support_pd_pps(struct charger_manager *pinfo)
-{
-	if (pinfo->enable_pe_4 == false)
-		return false;
-
-	if (pinfo->pd_type == MTK_PD_CONNECT_PE_READY_SNK_APDO)
-		return true;
-	return false;
 }
 
 void mtk_pe40_init_cap(struct charger_manager *info)
@@ -443,7 +418,6 @@ bool mtk_pe40_get_is_enable(struct charger_manager *pinfo)
 	return pinfo->pe4.is_enabled;
 }
 
-
 int mtk_pe40_get_ibus(struct charger_manager *pinfo, u32 *ibus)
 {
 	int ret = 0;
@@ -546,12 +520,8 @@ int pe40_get_output(struct charger_manager *pinfo,
 		&pe4_status->output_mv,
 		&pe4_status->output_ma);
 
-	//ret = tcpm_dpm_pd_get_pps_status(tcpc, NULL, &pps_status);
 	if (ret != 0)
 		return ret;
-
-	//pe4_status->output_mv = pps_status.output_mv;
-	//pe4_status->output_ma = pps_status.output_ma;
 
 	return ret;
 }
@@ -559,8 +529,8 @@ int pe40_get_output(struct charger_manager *pinfo,
 int mtk_pe40_get_init_watt(struct charger_manager *pinfo)
 {
 	int ret;
-	struct mtk_pe40 *pe40;
-	struct charger_data *pdata;
+	struct mtk_pe40 *pe40 = NULL;
+	struct charger_data *pdata = NULL;
 	int vbus1, ibus1;
 	int vbus2, ibus2;
 	int vbat1, vbat2;
@@ -576,13 +546,9 @@ int mtk_pe40_get_init_watt(struct charger_manager *pinfo)
 	pe40 = &pinfo->pe4;
 	voltage = 0;
 	mtk_pe40_get_setting_by_watt(pinfo, &voltage, &adapter_ibus,
-		&actual_current, 18000000, &input_current);
-	if (input_current < 2000) {
-		ret = adapter_dev_set_cap(pinfo->pd_adapter, MTK_PD_APDO, 5000, 2000);
-	} else {
-		ret = mtk_pe40_pd_request(pinfo, &voltage, &adapter_ibus,
-					input_current);
-	}
+		&actual_current, 27000000, &input_current);
+	ret = mtk_pe40_pd_request(pinfo, &voltage, &adapter_ibus,
+				input_current);
 
 	if (ret != 0 && ret != MTK_ADAPTER_REJECT &&
 			ret != MTK_ADAPTER_ADJUST) {
@@ -639,9 +605,8 @@ int mtk_pe40_get_init_watt(struct charger_manager *pinfo)
 int mtk_pe40_init_state(struct charger_manager *pinfo)
 {
 	struct switch_charging_alg_data *swchgalg = pinfo->algorithm_data;
-	struct mt_charger	*mt_chg = power_supply_get_drvdata(pinfo->usb_psy);
 	int ret = 0;
-	struct mtk_pe40 *pe40;
+	struct mtk_pe40 *pe40 = NULL;
 	int vbus1, vbat1, ibus1;
 	int vbus2, vbat2, ibus2;
 	struct pe4_pps_status cap, cap1, cap2;
@@ -651,7 +616,7 @@ int mtk_pe40_init_state(struct charger_manager *pinfo)
 	int input_current = 0;
 	bool chg2_chip_enabled = false;
 
-	struct charger_data *pdata2;
+	struct charger_data *pdata2 = NULL;
 
 	if (pinfo->enable_hv_charging == false)
 		goto retry;
@@ -727,10 +692,8 @@ int mtk_pe40_init_state(struct charger_manager *pinfo)
 			charger_dev_enable_chip(pinfo->chg2_dev, true);
 		charger_dev_enable(pinfo->chg2_dev, true);
 
-
 		charger_dev_set_input_current(pinfo->chg2_dev,
 			pdata2->input_current_limit);
-
 		charger_dev_set_charging_current(pinfo->chg2_dev,
 			pdata2->charging_current_limit);
 	}
@@ -842,6 +805,8 @@ int mtk_pe40_init_state(struct charger_manager *pinfo)
 	voltage = 0;
 	mtk_pe40_get_setting_by_watt(pinfo, &voltage, &adapter_ibus,
 				&actual_current, watt, &input_current);
+	if (voltage <= 0)
+		chr_err("abnormal voltage: %d\n", voltage);
 	pe40->avbus = voltage / 10 * 10;
 	ret = mtk_pe40_pd_request(pinfo, &pe40->avbus, &adapter_ibus,
 				input_current);
@@ -853,13 +818,15 @@ int mtk_pe40_init_state(struct charger_manager *pinfo)
 	}
 
 	pe40->avbus = voltage;
-	pe40->ibus = watt / voltage;
+	if (voltage > 0)
+		pe40->ibus = watt / voltage;
+	else
+		pe40->ibus = 0;
 	pe40->watt = watt;
 
 	swchgalg->state = CHR_PE40_CC;
 	pinfo->polling_interval = 10;
-	mt_chg->usb_desc.type = POWER_SUPPLY_TYPE_USB_PD;
-	power_supply_changed(pinfo->usb_psy);
+
 	return 0;
 
 retry:
@@ -875,7 +842,6 @@ int mtk_pe40_safety_check(struct charger_manager *pinfo)
 	int vbus;
 	struct mtk_pe40 *pe40;
 	struct pe4_pps_status cap;
-	//struct pd_status TAstatus = {0,};
 	struct adapter_status TAstatus;
 	int ret;
 	int tmp;
@@ -926,7 +892,6 @@ int mtk_pe40_safety_check(struct charger_manager *pinfo)
 	/* TA Thermal */
 	for (i = 0; i < 3; i++) {
 		ret = adapter_dev_get_status(pinfo->pd_adapter, &TAstatus);
-		//ret = tcpm_dpm_pd_get_status(pinfo->tcpc, NULL, &TAstatus);
 		if (TAstatus.temperature >= 100 &&
 			TAstatus.temperature != 0 &&
 			ret != MTK_ADAPTER_NOT_SUPPORT &&
@@ -986,13 +951,13 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 {
 	int ibus = 0, vbat, ibat, vbus, compare_ibus = 0;
 	int icl, ccl, ccl2, cv, max_icl;
-	struct mtk_pe40 *pe40;
+	struct mtk_pe40 *pe40 = NULL;
 	int ret;
 	int oldavbus = 0;
 	int oldibus = 0;
 	int watt;
 	int max_watt;
-	struct charger_data *pdata;
+	struct charger_data *pdata = NULL;
 	int actual_current;
 	int new_watt = 0;
 	int adapter_ibus = 0;
@@ -1007,6 +972,11 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 
 	if (pinfo->enable_hv_charging == false)
 		goto disable_hv;
+	if (pinfo->pd_reset == true) {
+		chr_err("encounter hard reset, stop pe4.0\n");
+		pinfo->pd_reset = false;
+		goto retry;
+	}
 
 	pdata = &pinfo->chg1_data;
 	pe40 = &pinfo->pe4;
@@ -1017,7 +987,6 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 	mtk_pe40_get_ibus(pinfo, &ibus);
 	ibus = ibus / 1000;
 	oldibus = ibus;
-
 	charger_dev_get_mivr_state(pinfo->chg1_dev, &chg1_mivr);
 	charger_dev_get_mivr(pinfo->chg1_dev, &mivr1);
 
@@ -1036,7 +1005,7 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 	watt = pe40->avbus * ibus;
 
 	icl = pinfo->chg1_data.input_current_limit / 1000 *
-	(100 - pinfo->data.ibus_err) / 100;
+		(100 - pinfo->data.ibus_err) / 100;
 
 	if (pinfo->data.parallel_vbus) {
 		charger_dev_get_ibus(pinfo->chg1_dev, &compare_ibus);
@@ -1081,11 +1050,11 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 			thermal_skip = true;
 	}
 
-	oldavbus = pe40->avbus;
-
 	if (((chg1_mivr || chg2_mivr) && !thermal_skip) ||
 	    ((compare_ibus >= (max_icl - icl_threshold)) && !thermal_skip) ||
 	    (compare_ibus <= (max_icl - icl_threshold * 2))) {
+
+		oldavbus = pe40->avbus;
 
 		if (chg1_mivr || chg2_mivr) {
 			pe40->avbus = pe40->avbus + 50;
@@ -1093,7 +1062,6 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 				new_watt = (pe40->avbus + 50) * icl * 2;
 			else
 				new_watt = (pe40->avbus + 50) * icl;
-
 		} else if (compare_ibus >= (max_icl - icl_threshold)) {
 			pe40->avbus = pe40->avbus + 50;
 			new_watt = (pe40->avbus + 50) * ibus;
@@ -1113,17 +1081,11 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 			pe40->avbus = 5000;
 
 		if (abs(pe40->avbus - oldavbus) >= 50) {
-			if (pe40->avbus > oldavbus && ibat > 2500 &&
-				input_current < 2000) {
-				chr_err("[pe40_cc]skip request\n");
-				pe40->avbus = oldavbus;
-			} else {
-				ret = mtk_pe40_pd_request(pinfo, &pe40->avbus,
-						&adapter_ibus, input_current);
-				if (ret != 0 && ret != MTK_ADAPTER_REJECT &&
-						ret != MTK_ADAPTER_ADJUST)
-					goto err;
-			}
+			ret = mtk_pe40_pd_request(pinfo, &pe40->avbus,
+					&adapter_ibus, input_current);
+			if (ret != 0 && ret != MTK_ADAPTER_REJECT &&
+					ret != MTK_ADAPTER_ADJUST)
+				goto err;
 		}
 		msleep(100);
 
@@ -1147,7 +1109,7 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 	if (ret == 1)
 		goto disable_hv;
 
-	if (oldavbus * oldibus <= PE40_MIN_WATT) {
+	if (pe40->avbus * oldibus <= PE40_MIN_WATT) {
 		if (pinfo->enable_hv_charging == false ||
 			pdata->thermal_charging_current_limit != -1 ||
 			pdata->thermal_input_current_limit != -1)
@@ -1159,6 +1121,7 @@ int mtk_pe40_cc_state(struct charger_manager *pinfo)
 
 	return 0;
 
+retry:
 disable_hv:
 	mtk_pe40_end(pinfo, 0, true);
 	return 0;

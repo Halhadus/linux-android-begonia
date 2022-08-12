@@ -3,7 +3,7 @@
  * FocalTech TouchScreen driver.
  *
  * Copyright (c) 2012-2019, FocalTech Systems, Ltd., all rights reserved.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -67,7 +67,8 @@
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
-
+extern int fts_write_v2(u8 *writebuf, u32 writelen);
+extern int fts_read_v2(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen);
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
@@ -300,7 +301,7 @@ err_boot_write:
 	return ret;
 }
 
-int fts_write(u8 *writebuf, u32 writelen)
+static int fts_write_v1(u8 *writebuf, u32 writelen)
 {
 	u8 *cmd = NULL;
 	u32 cmdlen = 0;
@@ -334,12 +335,35 @@ int fts_write(u8 *writebuf, u32 writelen)
 	return fts_boot_write(&cmd[0], cmdlen, data, datalen);
 }
 
-int fts_write_reg(u8 addr, u8 value)
+int fts_write(u8 *writebuf, u32 writelen)
 {
-	return fts_boot_write(&addr, 1, &value, 1);
+	int ret = 0;
+
+	if (fts_data->ic_type == IC_TYPE_FT8719)
+		ret = fts_write_v1(writebuf, writelen);
+	else
+		ret = fts_write_v2(writebuf, writelen);
+
+	return ret;
 }
 
-int fts_read(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen)
+int fts_write_reg(u8 addr, u8 value)
+{
+	int ret = 0;
+	u8 writebuf[2] = { 0 };
+
+	if (fts_data->ic_type == IC_TYPE_FT8719)
+		ret =  fts_boot_write(&addr, 1, &value, 1);
+	else {
+		writebuf[0] = addr;
+		writebuf[1] = value;
+		ret = fts_write_v2(writebuf, 2);
+	}
+
+	return ret;
+}
+
+static int fts_read_v1(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen)
 {
 	int ret = 0;
 	struct fts_ts_data *ts_data = fts_data;
@@ -437,6 +461,18 @@ boot_read_err:
 		}
 	}
 	mutex_unlock(&ts_data->bus_lock);
+	return ret;
+}
+
+int fts_read(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen)
+{
+	int ret = 0;
+
+	if (fts_data->ic_type == IC_TYPE_FT8719)
+		ret = fts_read_v1(cmd, cmdlen, data, datalen);
+	else
+		ret = fts_read_v2(cmd, cmdlen, data, datalen);
+
 	return ret;
 }
 

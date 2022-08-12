@@ -1,5 +1,6 @@
 /************************************************************************
 * Copyright (C) 2012-2019, Focaltech Systems (R)£¬All Rights Reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
 *
 * File Name: focaltech_flash.h
 *
@@ -60,6 +61,9 @@
 #define FTS_CMD_DATA_LEN							0xB0
 #define FTS_CMD_APP_DATA_LEN_INCELL				 0x7A
 #define FTS_CMD_DATA_LEN_LEN						4
+#define FTS_CMD_SET_WFLASH_ADDR                     0xAB
+#define FTS_CMD_SET_RFLASH_ADDR                     0xAC
+#define FTS_LEN_SET_ADDR                            4
 #define FTS_CMD_WRITE							   0xBF
 #define FTS_RETRIES_WRITE						   100
 #define FTS_RETRIES_DELAY_WRITE					 1
@@ -154,6 +158,21 @@ struct upgrade_func {
 	int (*force_upgrade)(u8 *, u32);
 };
 
+struct upgrade_setting_nf {
+    u8 rom_idh;
+    u8 rom_idl;
+    u16 reserved;
+    u32 app2_offset;
+    u32 ecclen_max;
+    u8 eccok_val;
+    u8 upgsts_boot;
+    u8 delay_init;
+    bool spi_pe;
+    bool half_length;
+    bool fd_check;
+    bool drwr_support;
+};
+
 struct upgrade_module {
 	int id;
 	char vendor_name[MAX_MODULE_VENDOR_NAME_LEN];
@@ -165,6 +184,7 @@ struct fts_upgrade {
 	struct fts_ts_data *ts_data;
 	struct upgrade_module *module_info;
 	struct upgrade_func *func;
+	struct upgrade_setting_nf *setting_nf;
 	int module_id;
 	bool fw_from_request;
 	u8 *fw;

@@ -16,8 +16,7 @@
 
 struct simtray_data {
 	struct device *dev;
-	int status_gpio_0;
-	int status_gpio_1;
+	int status_gpio;
 };
 
 static ssize_t simtray_status_show(struct device *dev,
@@ -25,10 +24,7 @@ static ssize_t simtray_status_show(struct device *dev,
 {
 	struct simtray_data *data = dev_get_drvdata(dev);
 
-	int val_0 = gpio_get_value(data->status_gpio_0);
-	int val_1 = gpio_get_value(data->status_gpio_1);
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", val_0 && val_1);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", gpio_get_value(data->status_gpio));
 }
 static DEVICE_ATTR(status, 0444, simtray_status_show, NULL);
 
@@ -45,10 +41,9 @@ static int simtray_probe(struct platform_device *pdev)
 	if (!data)
 		return -ENOMEM;
 
-	data->status_gpio_0 = of_get_named_gpio(np, "status-gpio", 0);
-	data->status_gpio_1 = of_get_named_gpio(np, "status-gpio", 1);
+	data->status_gpio = of_get_named_gpio(np, "status-gpio", 0);
 
-	if (data->status_gpio_0 < 0 || data->status_gpio_1 < 0)
+	if (data->status_gpio < 0)
 		return -EINVAL;
 
 	ret = sysfs_create_file(&dev->kobj, &dev_attr_status.attr);
@@ -88,4 +83,5 @@ module_platform_driver(simtray_status_driver);
 MODULE_AUTHOR("Tao Jun<taojun@xiaomi.com>");
 MODULE_DESCRIPTION("Xiaomi SIM tray status");
 MODULE_LICENSE("GPL");
+
 

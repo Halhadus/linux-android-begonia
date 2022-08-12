@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -111,15 +110,6 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		notify_adapter_event(MTK_PD_ADAPTER,
 			MTK_TYPEC_WD_STATUS, &noti->wd_status.water_detected);
 		break;
-	case TCP_NOTIFY_RA_DETECT:
-		notify_adapter_event(MTK_PD_ADAPTER,
-			MTK_RA_DETECT, &noti->ra_detect.detected);
-		break;
-	case TCP_NOTIFY_WIRELESS_CHARGER:
-		notify_adapter_event(MTK_PD_ADAPTER, MTK_WIRELESS_CHARGER,
-			&noti->wireless_charger.is_wireless_charger);
-		/* To do */
-		break;
 	case TCP_NOTIFY_HARD_RESET_STATE:
 		if (noti->hreset_state.state == TCP_HRESET_RESULT_DONE ||
 			noti->hreset_state.state == TCP_HRESET_RESULT_FAIL) {
@@ -167,7 +157,7 @@ static int pd_set_cap(struct adapter_device *dev, enum adapter_cap_type type,
 {
 	int ret = MTK_ADAPTER_OK;
 	int tcpm_ret = TCPM_SUCCESS;
-	struct mtk_pd_adapter_info *info;
+	struct mtk_pd_adapter_info *info = NULL;
 
 	chr_err("[%s] type:%d mV:%d mA:%d\n",
 		__func__, type, mV, mA);

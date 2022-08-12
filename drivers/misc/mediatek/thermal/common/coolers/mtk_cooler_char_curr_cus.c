@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2019 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -59,17 +59,18 @@ static unsigned int max_char_curr_index;
 *  0	: stop charging
 *  positive integer: charging current limit (unit: mA)
 */
-static int char_curr_t[CHAR_CURR_TABLE_INDEX] = {
-	-1, 2800, 2600, 2400, 2200,
-	2000, 1800, 1600, 1400, 1200,
-	1000,  800,  600,  400,  200,
-	0};
+static int char_curr_t[CHAR_CURR_TABLE_INDEX] =
+	{  -1, 2800, 2600, 2400, 2200,
+	 2000, 1800, 1600, 1400, 1200,
+	 1000,  800,  600,  400,  200,
+	 0};
 
 static int _cl_char_curr_read(struct seq_file *m, void *v)
 {
 	int i = 0;
 	mtk_cooler_char_curr_dprintk("%s\n", __func__);
-	seq_printf(m, "charger_current state=%d max=%d\n", g_char_curr_level, max_char_curr_index);
+	seq_printf(m, "charger_current state=%d max=%d\n",
+		g_char_curr_level, max_char_curr_index);
 	seq_printf(m, "[index, current]\n");
 	for (i = 0; i < max_char_curr_index; i++) {
 		seq_printf(m, "(%4d,  %4d)\n", i, char_curr_t[i]);
@@ -115,10 +116,11 @@ static int mtk_cl_char_curr_set_cur_state
 
 #if (CONFIG_MTK_GAUGE_VERSION == 30)
 	if (state >= max_char_curr_index || state < 0) {
-		mtk_cooler_char_curr_dprintk("%s: wrong state=%lu %d\n",
+		mtk_cooler_char_curr_dprintk("%s: wrong state=%ld %d\n",
 			__func__, state, max_char_curr_index);
 	} else {
 		g_char_curr_level = state;
+
 		if (g_char_curr_level == 0) {
 			chr_input_curr_limit = -1;/* unlimit input current*/
 		} else {
@@ -127,16 +129,19 @@ static int mtk_cl_char_curr_set_cur_state
 		}
 
 		if (chr_input_curr_limit != 0) {
-			charger_manager_set_input_current_limit(thm_chr_consumer, 0,
-				chr_input_curr_limit);
+			charger_manager_set_input_current_limit(
+				thm_chr_consumer, 0, chr_input_curr_limit);
 			mtk_cooler_char_curr_dprintk("%s: l=%d curr=%d\n",
-				__func__, g_char_curr_level, chr_input_curr_limit);
+				__func__, g_char_curr_level,
+				chr_input_curr_limit);
 
 			if (g_thm_en_charging == 0) {
 				g_thm_en_charging = 1;
-				charger_manager_enable_power_path(thm_chr_consumer, 0,
+				charger_manager_enable_power_path(
+					thm_chr_consumer, 0,
 					g_thm_en_charging);
-				mtk_cooler_char_curr_dprintk("%s: en_charging = %d\n",
+				mtk_cooler_char_curr_dprintk(
+					"%s: en_charging = %d\n",
 					__func__, g_thm_en_charging);
 			}
 		} else if (chr_input_curr_limit == 0 && g_thm_en_charging) {
@@ -149,57 +154,14 @@ static int mtk_cl_char_curr_set_cur_state
 	return 0;
 }
 
-#if 0
-static int update_char_curr_table(void)
-{
-	int input_curr = 0, ret = 0, curr_opp, i;
-#if 0
-
-	mutex_lock(thm_chr_mutex);
-
-	ret = charger_manager_get_input_current_limit(thm_chr_consumer, 0, &input_curr);
-	mtk_cooler_char_curr_dprintk("%d\n", input_curr);
-	input_curr /= 1000;/*uA to mA*/
-
-	if (!ret) {
-		max_char_curr_index = 0;
-		memset(char_curr_t, 0, sizeof(char_curr_t));
-		curr_opp = input_curr;
-		for (i = 0; curr_opp > 0; i++) {
-			max_char_curr_index = i;
-			char_curr_t[i] = curr_opp;
-			curr_opp -= CHAR_CURR_INTERVAL;
-			if (i == CHAR_CURR_TABLE_INDEX - 2) {
-				i++;
-				break;
-			}
-		}
-		max_char_curr_index = i;
-		char_curr_t[i] = 0;
-	} else {
-		max_char_curr_index = 0;
-		memset(char_curr_t, 0, sizeof(char_curr_t));
-		mtk_cooler_char_curr_dprintk("%s: can't get intput current ret = %d\n", __func__, ret);
-	}
-
-	mutex_unlock(thm_chr_mutex);
-#else
-	char_curr_t[0] = -1;/* max current */
-	for (i = 0; i < CHAR_CURR_TABLE_INDEX - 1; i++) {
-		char_curr_t[CHAR_CURR_TABLE_INDEX - i - 1] = i * CHAR_CURR_INTERVAL;
-	}
-#endif
-	return ret;
-}
-#endif
-
 static int mtk_cl_char_curr_get_available
 (struct thermal_cooling_device *cdev, char *available)
 {
 	int len = 0, i;
 
 	for (i = 0; i < max_char_curr_index; i++) {
-		len += snprintf(available + len, 20, "%d %d\n", i, char_curr_t[i]);
+		len += snprintf(available + len, 20, "%d %d\n",
+			i, char_curr_t[i]);
 	}
 	mtk_cooler_char_curr_dprintk("%s\n", available);
 

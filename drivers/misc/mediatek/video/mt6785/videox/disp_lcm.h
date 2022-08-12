@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -83,5 +83,24 @@ void disp_lcm_arr_send_cmd(
 	void *cmdq_handle, unsigned int from_fps, unsigned int to_fps,
 	enum LCM_DFPS_FRAME_ID frame_id);
 
+
+#ifdef CONFIG_MTK_HIGH_FRAME_RATE
+/*-----------------------DynFPS start-----------------------------------*/
+int disp_lcm_is_dynfps_support(struct disp_lcm_handle *plcm);
+unsigned int disp_lcm_dynfps_get_def_fps(
+		struct disp_lcm_handle *plcm);
+unsigned int disp_lcm_dynfps_get_dfps_num(
+		struct disp_lcm_handle *plcm);
+unsigned int disp_lcm_dynfps_get_def_timing_fps(
+	struct disp_lcm_handle *plcm);
+bool disp_lcm_need_send_cmd(
+	struct disp_lcm_handle *plcm,
+	unsigned int last_dynfps, unsigned int new_dynfps);
+void disp_lcm_dynfps_send_cmd(
+	struct disp_lcm_handle *plcm, void *cmdq_handle,
+	unsigned int from_fps, unsigned int to_fps);
+
+/*-----------------------DynFPS end-----------------------------------*/
+#endif
 
 #endif /* _DISP_LCM_H_ */

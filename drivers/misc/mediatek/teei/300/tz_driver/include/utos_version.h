@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2015-2019, MICROTRUST Incorporated
- * Copyright (C) 2020 XiaoMi, Inc.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -15,5 +14,5 @@
 
 #ifndef __UTOS_VERSION_H__
 #define __UTOS_VERSION_H__
-#define UTOS_VERSION  "stable_2.8.0 for Android P_20190312_stage3"
+#define UTOS_VERSION  "tag.base.dbg.2.5.3"
 #endif

@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -17,9 +16,6 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/hardirq.h>
-#include <linux/irq.h>
-#include <linux/irqdesc.h>
-#include <linux/irqnr.h>
 #include <linux/init.h>
 #include <linux/kallsyms.h>
 #include <linux/miscdevice.h>
@@ -45,7 +41,6 @@
 #include <linux/ptrace.h>
 #include <asm/stacktrace.h>
 #include <asm/traps.h>
-#include <asm/atomic.h>
 #include "aed.h"
 #include "../common/aee-common.h"
 #include "../mrdump/mrdump_mini.h"
@@ -66,7 +61,7 @@
 #include <mrdump.h>
 
 #ifndef TASK_STATE_TO_CHAR_STR
-#define TASK_STATE_TO_CHAR_STR "RSDTtXZxKWPNn"
+#define TASK_STATE_TO_CHAR_STR "RSDTtZXxKWPNn"
 #endif
 
 //#define HANG_LOW_MEM
@@ -1430,47 +1425,56 @@ static void show_bt_by_pid(int task_pid)
 #endif
 	int count = 0, dump_native = 0;
 	unsigned int state = 0;
+	char stat_nam[] = TASK_STATE_TO_CHAR_STR;
 
 	pid = find_get_pid(task_pid);
 	t = p = get_pid_task(pid, PIDTYPE_PID);
 
-	if (p != NULL && try_get_task_stack(p)) {
-		Log2HangInfo("%s: %d: %s.\n", __func__, task_pid, t->comm);
+	if (p != NULL) {
+		if (try_get_task_stack(p)) {
+			Log2HangInfo("%s: %d: %s.\n", __func__, task_pid, t->comm);
 #ifndef __aarch64__	 /* 32bit */
-		if (strcmp(t->comm, "system_server") == 0)
-			dump_native = 1;
-		else
-			dump_native = 0;
-#else
-		user_ret = task_pt_regs(t);
-
-		if (!user_mode(user_ret)) {
-			pr_info(" %s,%d:%s,fail in user_mode", __func__,
-					task_pid, t->comm);
-			dump_native = 0;
-		} else	if (t->mm == NULL) {
-			pr_info(" %s,%d:%s, current_task->mm == NULL", __func__,
-					task_pid, t->comm);
-			dump_native = 0;
-		} else if (compat_user_mode(user_ret)) {
-			/* K64_U32 for check reg */
 			if (strcmp(t->comm, "system_server") == 0)
 				dump_native = 1;
 			else
 				dump_native = 0;
-		} else
-			dump_native = 1;
+#else
+			user_ret = task_pt_regs(t);
+
+			if (!user_mode(user_ret)) {
+				pr_info(" %s,%d:%s,fail in user_mode", __func__,
+						task_pid, t->comm);
+				dump_native = 0;
+			} else	if (t->mm == NULL) {
+				pr_info(" %s,%d:%s, current_task->mm == NULL", __func__,
+						task_pid, t->comm);
+				dump_native = 0;
+			} else if (compat_user_mode(user_ret)) {
+				/* K64_U32 for check reg */
+				if (strcmp(t->comm, "system_server") == 0)
+					dump_native = 1;
+				else
+					dump_native = 0;
+			} else
+				dump_native = 1;
 #endif
-		if (dump_native == 1)
-			/* catch maps to Userthread_maps */
-			DumpThreadNativeMaps(task_pid, p);
+			if (dump_native == 1)
+				/* catch maps to Userthread_maps */
+				DumpThreadNativeMaps(task_pid, p);
+			put_task_stack(p);
+		} else {
+			state = p->state ? __ffs(p->state) + 1 : 0;
+			Log2HangInfo("%s pid %d state %c, flags %d. stack is null.\n",
+				t->comm, task_pid, state < sizeof(stat_nam) - 1 ?
+				stat_nam[state] : '?', t->flags);
+		}
+
 		do {
 			if (t && try_get_task_stack(t)) {
 				pid_t tid = 0;
 
 				get_task_struct(t);
 				tid = task_pid_vnr(t);
-				state = t->state ? __ffs(t->state) + 1 : 0;
 				/* catch kernel bt */
 				show_thread_info(t, true);
 
@@ -1486,12 +1490,7 @@ static void show_bt_by_pid(int task_pid)
 				msleep(20);
 			Log2HangInfo("-\n");
 		} while_each_thread(p, t);
-		put_task_stack(p);
 		put_task_struct(p);
-	} else if (p != NULL) {
-		put_task_struct(p);
-		Log2HangInfo("%s pid %d state %d, flags %d. stack is null.\n",
-			t->comm, task_pid, t->state, t->flags);
 	}
 	put_pid(pid);
 }
@@ -1550,26 +1549,6 @@ static void hang_dump_backtrace(void)
 			do_send_sig_info(SIGQUIT, SEND_SIG_FORCED,
 				monkey_task, true);
 	}
-}
-
-static void hang_dump_irq_status(void)
-{
-	struct irq_desc *desc;
-	int irq;
-
-	pr_alert("dump_irq_status start\n");
-	for_each_irq_desc(irq, desc) {
-		if (desc->status_use_accessors & IRQ_NESTED_THREAD)
-			continue;
-
-		if (irqd_irq_inprogress(&desc->irq_data))
-			pr_alert("irq-%d hwirq(%lu) inprogress\n",
-			       irq, (&desc->irq_data)->hwirq);
-		if (atomic_read(&desc->threads_active))
-			pr_alert("irq-%d hwirq(%lu) threads_active\n",
-			       irq, (&desc->irq_data)->hwirq);
-	}
-	pr_alert("dump_irq_status end\n");
 }
 
 static void ShowStatus(int flag)
@@ -1756,7 +1735,6 @@ static int hang_detect_thread(void *arg)
 					pr_notice(
 						"[Hang_Detect] aee mode is %d, we should triger KE...\n",
 						aee_mode);
-					hang_dump_irq_status();
 #ifdef CONFIG_MTK_RAM_CONSOLE
 	if (watchdog_thread_exist == false && reboot_flag == false)
 		aee_rr_rec_hang_detect_timeout_count(COUNT_ANDROID_REBOOT);
@@ -1766,7 +1744,7 @@ static int hang_detect_thread(void *arg)
 					/* eng load can detect whether KE*/
 #endif
 						/* BUG(); */
-						show_kaslr();
+						show_kaslr(true);
 						mrdump_mini_add_hang_raw(
 						(unsigned long)Hang_Info,
 							MaxHangInfoSize);
@@ -1813,7 +1791,6 @@ void hd_test(void)
 
 void aee_kernel_RT_Monitor_api(int lParam)
 {
-	reset_hang_info();
 	if (reboot_flag) {
 		pr_info("[Hang_Detect] in reboot flow.\n");
 		return;
@@ -1845,6 +1822,7 @@ void aee_kernel_RT_Monitor_api(int lParam)
 		}
 		pr_info("[Hang_Detect] hang_detect enabled %d\n", hd_timeout);
 	}
+	reset_hang_info();
 }
 
 int hang_detect_init(void)

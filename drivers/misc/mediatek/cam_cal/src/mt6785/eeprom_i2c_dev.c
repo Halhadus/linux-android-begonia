@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -17,7 +17,7 @@ static enum EEPROM_I2C_DEV_IDX gi2c_dev_sel[IMGSENSOR_SENSOR_IDX_MAX_NUM] = {
 	I2C_DEV_IDX_1, /* main */
 	I2C_DEV_IDX_2, /* sub */
 	I2C_DEV_IDX_3, /* main2 */
-	I2C_DEV_IDX_2, /* sub2 *//* XIAOMI: libin16 change it*/
+	I2C_DEV_IDX_2, /* sub2 */
 	I2C_DEV_IDX_3, /* main3 */
 };
 

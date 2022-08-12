@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -31,7 +31,7 @@
 #define AF_DEBUG
 #ifdef AF_DEBUG
 #define LOG_INF(format, args...)                                               \
-	pr_err(AF_DRVNAME " [%s] " format, __func__, ##args)
+	pr_debug(AF_DRVNAME " [%s] " format, __func__, ##args)
 #else
 #define LOG_INF(format, args...)
 #endif
@@ -68,6 +68,27 @@ static int s4AF_ReadReg(unsigned short *a_pu2Result)
 }
 #endif
 
+/*static int s4AF_WriteReg(u16 a_u2Data)
+{
+	int i4RetValue = 0;
+
+	char puSendCmd[2] = {(char)(a_u2Data >> 4),
+			     (char)((a_u2Data & 0xF) << 4)};
+
+	g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;
+
+	g_pstAF_I2Cclient->addr = g_pstAF_I2Cclient->addr >> 1;
+
+	i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd, 2);
+
+	if (i4RetValue < 0) {
+		LOG_INF("I2C send failed!!\n");
+		return -1;
+	}
+
+	return 0;
+}*/
+
 static int s4AF_WriteReg(u16 a_u2Data)
 {
 	int i4RetValue = 0;
@@ -76,6 +97,7 @@ static int s4AF_WriteReg(u16 a_u2Data)
 			(char)((a_u2Data >> 8) & 0x03),
 			(char)(a_u2Data & 0xFF)};
 
+	printk("jianlong s4AF_WriteReg\n");
 	g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;
 
 	g_pstAF_I2Cclient->addr = g_pstAF_I2Cclient->addr >> 1;
@@ -89,6 +111,7 @@ static int s4AF_WriteReg(u16 a_u2Data)
 
 	return 0;
 }
+
 
 static inline int getAFInfo(__user struct stAF_MotorInfo *pstMotorInfo)
 {
@@ -124,6 +147,7 @@ static int initAF(void)
 	unsigned char cmd_number;
 
 	LOG_INF("+\n");
+
 	if (*g_pAF_Opened == 1) {
 
 		g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;
@@ -145,6 +169,7 @@ static int initAF(void)
 		*g_pAF_Opened = 2;
 		spin_unlock(g_pAF_SpinLock);
 	}
+
 	LOG_INF("-\n");
 
 	return 0;
@@ -154,7 +179,7 @@ static int initAF(void)
 static inline int moveAF(unsigned long a_u4Position)
 {
 	int ret = 0;
-
+	printk("jianlong moveAF\n");
 	if (s4AF_WriteReg((unsigned short)a_u4Position) == 0) {
 		g_u4CurrPosition = a_u4Position;
 		ret = 0;
@@ -226,6 +251,7 @@ int DW9714AF_Release_Sub2(struct inode *a_pstInode, struct file *a_pstFile)
 	char puSendCmd1[2] = {0x02, 0x01};
 	int i4RetValue = 0;
 	LOG_INF("Start\n");
+
 	if (*g_pAF_Opened == 2) {
 		LOG_INF("Wait\n");
 		g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;

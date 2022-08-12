@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -24,9 +25,6 @@
 
 /* If UPMU function not ready, comment this define */
 #define UPMU_READY
-
-/* If srclkenRC function not ready, comment this define */
-/* #define SR_CLKEN_RC_READY */
 #endif
 
 #define HIE_CHANGE_KEY_IN_NORMAL_WORLD
@@ -89,6 +87,7 @@ int  ufs_mtk_pltfrm_bootrom_deputy(struct ufs_hba *hba);
 int  ufs_mtk_pltfrm_deepidle_check_h8(void);
 void ufs_mtk_pltfrm_deepidle_leave(void);
 void ufs_mtk_pltfrm_deepidle_lock(struct ufs_hba *hba, bool lock);
+int  ufs_mtk_pltfrm_ref_clk_ctrl(struct ufs_hba *hba, bool on);
 int  ufs_mtk_pltfrm_init(void);
 int  ufs_mtk_pltfrm_parse_dt(struct ufs_hba *hba);
 int  ufs_mtk_pltfrm_resume(struct ufs_hba *hba);

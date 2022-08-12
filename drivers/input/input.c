@@ -2,7 +2,7 @@
  * The input core
  *
  * Copyright (c) 1999-2002 Vojtech Pavlik
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 /*
@@ -56,6 +56,8 @@ static LIST_HEAD(input_handler_list);
  * input handlers.
  */
 static DEFINE_MUTEX(input_mutex);
+
+static const struct input_value input_value_sync = { EV_SYN, SYN_REPORT, 1 };
 
 #ifdef CONFIG_TOUCH_COUNT_DUMP
 static struct touch_event_info *touch_info;
@@ -111,6 +113,7 @@ static inline void touch_press_release_events_collect(struct input_dev *dev,
 
 		if (touch_events->touch_event_num >= TOUCH_EVENT_MAX)
 			touch_events->touch_event_num = 0;
+
 		break;
 
 	case BTN_TOUCH:
@@ -126,13 +129,16 @@ static inline void touch_press_release_events_collect(struct input_dev *dev,
 			touch_events->finger_bitmap = 0;
 		}
 		break;
+
 	}
 
 	return;
 }
 #endif
 
-static const struct input_value input_value_sync = { EV_SYN, SYN_REPORT, 1 };
+#ifdef CONFIG_DRM_DFPS
+extern void mtk_drm_crtc_touch_notify(void);
+#endif
 
 static inline int is_event_supported(unsigned int code,
 				     unsigned long *bm, unsigned int max)
@@ -522,6 +528,10 @@ void input_event(struct input_dev *dev,
 #ifdef CONFIG_LAST_TOUCH_EVENTS
 		touch_press_release_events_collect(dev, type, code, value);
 #endif
+#ifdef CONFIG_DRM_DFPS
+		if(type == EV_KEY && value == 1)
+			mtk_drm_crtc_touch_notify();
+#endif
 	}
 }
 EXPORT_SYMBOL(input_event);
@@ -554,6 +564,10 @@ void input_inject_event(struct input_handle *handle,
 		rcu_read_unlock();
 
 		spin_unlock_irqrestore(&dev->event_lock, flags);
+#ifdef CONFIG_DRM_DFPS
+		if(type == EV_KEY && value == 1)
+			mtk_drm_crtc_touch_notify();
+#endif
 	}
 }
 EXPORT_SYMBOL(input_inject_event);
@@ -945,16 +959,18 @@ static int input_default_setkeycode(struct input_dev *dev,
 		}
 	}
 
-	__clear_bit(*old_keycode, dev->keybit);
-	__set_bit(ke->keycode, dev->keybit);
-
-	for (i = 0; i < dev->keycodemax; i++) {
-		if (input_fetch_keycode(dev, i) == *old_keycode) {
-			__set_bit(*old_keycode, dev->keybit);
-			break; /* Setting the bit twice is useless, so break */
+	if (*old_keycode <= KEY_MAX) {
+		__clear_bit(*old_keycode, dev->keybit);
+		for (i = 0; i < dev->keycodemax; i++) {
+			if (input_fetch_keycode(dev, i) == *old_keycode) {
+				__set_bit(*old_keycode, dev->keybit);
+				/* Setting the bit twice is useless, so break */
+				break;
+			}
 		}
 	}
 
+	__set_bit(ke->keycode, dev->keybit);
 	return 0;
 }
 
@@ -1010,9 +1026,13 @@ int input_set_keycode(struct input_dev *dev,
 	 * Simulate keyup event if keycode is not present
 	 * in the keymap anymore
 	 */
-	if (test_bit(EV_KEY, dev->evbit) &&
-	    !is_event_supported(old_keycode, dev->keybit, KEY_MAX) &&
-	    __test_and_clear_bit(old_keycode, dev->key)) {
+	if (old_keycode > KEY_MAX) {
+		dev_warn(dev->dev.parent ?: &dev->dev,
+			 "%s: got too big old keycode %#x\n",
+			 __func__, old_keycode);
+	} else if (test_bit(EV_KEY, dev->evbit) &&
+		   !is_event_supported(old_keycode, dev->keybit, KEY_MAX) &&
+		   __test_and_clear_bit(old_keycode, dev->key)) {
 		struct input_value vals[] =  {
 			{ EV_KEY, old_keycode, 0 },
 			input_value_sync
@@ -1456,7 +1476,6 @@ static int __init input_proc_init(void)
 			    &input_handlers_fileops);
 	if (!entry)
 		goto fail2;
-
 #ifdef CONFIG_LAST_TOUCH_EVENTS
 	entry = proc_create("last_touch_events", 0, proc_bus_input_dir,
 				&input_last_touch_events_fileops);
@@ -1471,14 +1490,12 @@ static int __init input_proc_init(void)
 #endif /*CONFIG_LAST_TOUCH_EVENTS*/
 
 	return 0;
-
 #ifdef CONFIG_LAST_TOUCH_EVENTS
 #ifdef CONFIG_TOUCH_COUNT_DUMP
  fail4: remove_proc_entry("last_touch_events", proc_bus_input_dir);
 #endif
  fail3: remove_proc_entry("handlers", proc_bus_input_dir);
 #endif
-
  fail2:	remove_proc_entry("devices", proc_bus_input_dir);
  fail1: remove_proc_entry("bus/input", NULL);
 	return -ENOMEM;
@@ -2413,10 +2430,10 @@ EXPORT_SYMBOL(input_register_device);
 void input_unregister_device(struct input_dev *dev)
 {
 #ifdef CONFIG_LAST_TOUCH_EVENTS
-		if (dev->touch_events) {
-			kfree(dev->touch_events);
-			dev->touch_events = NULL;
-		}
+	if (dev->touch_events) {
+		kfree(dev->touch_events);
+		dev->touch_events = NULL;
+	}
 #ifdef CONFIG_TOUCH_COUNT_DUMP
 		unregister_hw_monitor_info("input");
 #endif

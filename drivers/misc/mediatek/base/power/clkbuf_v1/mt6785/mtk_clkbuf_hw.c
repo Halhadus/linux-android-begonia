@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -27,6 +27,7 @@
 #include <mt-plat/mtk_boot.h>
 //#include <mt-plat/upmu_common.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 
 static void __iomem *pwrap_base;
 
@@ -205,11 +206,13 @@ unsigned int __attribute__((weak))
 
 static void pmic_clk_buf_ctrl_ext(short on)
 {
-	if (on)
+	if (on) {
 		pmic_config_interface(PMIC_DCXO_CW09_SET_ADDR, 0x1,
 				      PMIC_XO_EXTBUF7_EN_M_MASK,
 				      PMIC_XO_EXTBUF7_EN_M_SHIFT);
-	else
+		udelay(400);
+
+	} else
 		pmic_config_interface(PMIC_DCXO_CW09_CLR_ADDR, 0x1,
 				      PMIC_XO_EXTBUF7_EN_M_MASK,
 				      PMIC_XO_EXTBUF7_EN_M_SHIFT);
@@ -1107,6 +1110,11 @@ static ssize_t clk_buf_show_status_info_internal(char *buf)
 
 u8 clk_buf_get_xo_en_sta(enum xo_id id)
 {
+	if (id < 0 || id >= XO_NUMBER)
+		return 0;
+
+	clk_buf_get_xo_en();
+
 	return xo_en_stat[id];
 }
 

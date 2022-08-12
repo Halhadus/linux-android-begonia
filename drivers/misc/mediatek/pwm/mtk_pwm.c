@@ -2,6 +2,7 @@
  * mtk_pwm.c PWM Drvier
  *
  * Copyright (c) 2016, Media Teck.inc
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public Licence,
@@ -74,7 +75,7 @@ static struct pwm_device pwm_dat = {
 
 static struct pwm_device *pwm_dev = &pwm_dat;
 
-static void mt_pwm_power_on(u32 pwm_no, bool pmic_pad)
+void mt_pwm_power_on(u32 pwm_no, bool pmic_pad)
 {
 	mutex_lock(&pwm_power_lock);
 
@@ -82,6 +83,7 @@ static void mt_pwm_power_on(u32 pwm_no, bool pmic_pad)
 
 	mutex_unlock(&pwm_power_lock);
 }
+EXPORT_SYMBOL(mt_pwm_power_on);
 
 static void mt_pwm_power_off(u32 pwm_no, bool pmic_pad)
 {
@@ -1942,8 +1944,8 @@ static int mt_pwm_probe(struct platform_device *pdev)
 		pr_debug(T "PWM get irqnr failed\n");
 		return -ENODEV;
 	}
-	pr_debug(T "pwm base: 0x%p = 0x%x pwm irq: %d\n",
-			pwm_base, (*((int *)pwm_base)), pwm_irqnr);
+	pr_debug(T "pwm base: 0x%p pwm irq: %d\n",
+			pwm_base, pwm_irqnr);
 
 	pwm_irqnr = platform_get_irq(pdev, 0);
 	if (pwm_irqnr <= 0) {
@@ -1952,10 +1954,10 @@ static int mt_pwm_probe(struct platform_device *pdev)
 	}
 #if PWM_LDVT_FLAG
 	ret = devm_request_irq(&pdev->dev, pwm_irqnr, mt_pwm_irq,
-		IRQF_TRIGGER_LOW, PWM_DEVICE, (void *) intr_pwm_nu);
+		IRQF_TRIGGER_NONE, PWM_DEVICE, (void *) intr_pwm_nu);
 #else
 	ret = devm_request_irq(&pdev->dev, pwm_irqnr, mt_pwm_irq,
-		IRQF_TRIGGER_LOW, PWM_DEVICE, NULL);
+		IRQF_TRIGGER_NONE, PWM_DEVICE, NULL);
 #endif
 	if (ret < 0) {
 		pr_err(T "[PWM]Request IRQ %d failed-------\n", pwm_irqnr);

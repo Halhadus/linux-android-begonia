@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -698,10 +698,10 @@ static int __init mtktspmic_init(void)
 	 */
 	mtktspmic_cali_prepare();
 	mtktspmic_cali_prepare2();
+
 #if defined(THERMAL_USE_IIO_CHANNEL)
 	mtktspmic_get_from_dts();
 #endif
-
 	err = mtktspmic_register_cooler();
 	if (err)
 		return err;

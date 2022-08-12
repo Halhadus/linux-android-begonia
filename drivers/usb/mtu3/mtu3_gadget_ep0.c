@@ -2,7 +2,7 @@
  * mtu3_gadget_ep0.c - MediaTek USB3 DRD peripheral driver ep0 handling
  *
  * Copyright (c) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * Author:  Chunfeng.Yun <chunfeng.yun@mediatek.com>
  *
@@ -18,7 +18,6 @@
  */
 
 #include <linux/usb/composite.h>
-
 #include "mtu3.h"
 
 /* ep0 is always mtu3->in_eps[0] */
@@ -74,7 +73,6 @@ static void musb_sync_with_chg(struct mtu3 *mtu, int usb_state)
 	BATTERY_SetUSBState(usb_state);
 }
 
-
 static int
 forward_to_driver(struct mtu3 *mtu, const struct usb_ctrlrequest *setup)
 __releases(mtu->lock)
@@ -82,6 +80,7 @@ __acquires(mtu->lock)
 {
 	int ret;
 	int usb_state;
+
 	if (!mtu->gadget_driver || !mtu->softconnect) {
 		pr_info("%s !softconnect\n", __func__);
 		return -EOPNOTSUPP;
@@ -318,6 +317,16 @@ static int handle_test_mode(struct mtu3 *mtu, struct usb_ctrlrequest *setup)
 	/* no TX completion interrupt, and need restart platform after test */
 	if (mtu->test_mode_nr == TEST_PACKET_MODE)
 		ep0_load_test_packet(mtu);
+
+	mtu3_writel(mbase, U3D_EP0CSR,
+				(mtu3_readl(mbase, U3D_EP0CSR) & EP0_W1C_BITS)
+				| EP0_SETUPPKTRDY | EP0_DATAEND);
+	mtu->ep0_state = MU3D_EP0_STATE_SETUP;
+
+	while ((mtu3_readl(mbase, U3D_EP0CSR) & EP0_DATAEND) != 0) {
+		/* Need to wait for status really loaded by host */
+		mdelay(1);/* Without this delay, it will fail. */
+	}
 
 	mtu3_writel(mbase, U3D_USB2_TEST_MODE, mtu->test_mode_nr);
 
@@ -579,7 +588,7 @@ static void ep0_tx_state(struct mtu3 *mtu)
 	struct usb_request *req;
 	u32 csr;
 	u8 *src;
-	u8 count;
+	u16 count;
 	u32 maxp;
 
 	dev_dbg(mtu->dev, "%s\n", __func__);

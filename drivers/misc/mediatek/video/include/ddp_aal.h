@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -72,6 +71,9 @@ struct DISP_AAL_INITREG {
 	int dre_y_upper;
 	int dre_h_lower;
 	int dre_h_upper;
+	int dre_h_slope;
+	int dre_s_slope;
+	int dre_y_slope;
 	int dre_x_alpha_base;
 	int dre_x_alpha_shift_bit;
 	int dre_y_alpha_base;
@@ -85,6 +87,19 @@ struct DISP_AAL_INITREG {
 	int dre_blk_area_min;
 	int hist_bin_type;
 	int dre_flat_length_slope;
+	int dre_flat_length_th;
+	int act_win_y_start;
+	int act_win_y_end;
+	int blk_num_x_start;
+	int blk_num_x_end;
+	int blk_cnt_x_start;
+	int blk_cnt_x_end;
+	int blk_num_y_start;
+	int blk_num_y_end;
+	int blk_cnt_y_start;
+	int blk_cnt_y_end;
+	int last_tile_x_flag;
+	int last_tile_y_flag;
 };
 
 struct DISP_DRE30_INIT {

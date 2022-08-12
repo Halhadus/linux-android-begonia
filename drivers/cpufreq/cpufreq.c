@@ -2,7 +2,6 @@
  *  linux/drivers/cpufreq/cpufreq.c
  *
  *  Copyright (C) 2001 Russell King
- *  Copyright (C) 2020 XiaoMi, Inc.
  *            (C) 2002 - 2003 Dominik Brodowski <linux@brodo.de>
  *            (C) 2013 Viresh Kumar <viresh.kumar@linaro.org>
  *
@@ -700,9 +699,6 @@ static ssize_t store_##file_name					\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
 									\
-	if (&policy->object == &policy->min)				\
-		return count;						\
-									\
 	memcpy(&new_policy, policy, sizeof(*policy));			\
 	new_policy.min = policy->user_policy.min;			\
 	new_policy.max = policy->user_policy.max;			\
@@ -922,6 +918,9 @@ static ssize_t show(struct kobject *kobj, struct attribute *attr, char *buf)
 	struct freq_attr *fattr = to_attr(attr);
 	ssize_t ret;
 
+	if (!fattr->show)
+		return -EIO;
+
 	down_read(&policy->rwsem);
 	ret = fattr->show(policy, buf);
 	up_read(&policy->rwsem);
@@ -935,6 +934,9 @@ static ssize_t store(struct kobject *kobj, struct attribute *attr,
 	struct cpufreq_policy *policy = to_policy(kobj);
 	struct freq_attr *fattr = to_attr(attr);
 	ssize_t ret = -EINVAL;
+
+	if (!fattr->store)
+		return -EIO;
 
 	cpus_read_lock();
 
@@ -1685,6 +1687,9 @@ void cpufreq_resume(void)
 	if (!cpufreq_driver)
 		return;
 
+	if (unlikely(!cpufreq_suspended))
+		return;
+
 	cpufreq_suspended = false;
 
 	if (!has_target() && !cpufreq_driver->resume)
@@ -2203,12 +2208,6 @@ int cpufreq_get_policy(struct cpufreq_policy *policy, unsigned int cpu)
 }
 EXPORT_SYMBOL(cpufreq_get_policy);
 
-void thermal_limits_notify(struct cpufreq_policy *policy)
-{
-	/* the adjusted frequency should not exceed thermal limit */
-	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
-			CPUFREQ_THERMAL, policy);
-}
 /*
  * policy : current policy.
  * new_policy: policy to be set.
@@ -2239,9 +2238,6 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	/* adjust if necessary - all reasons */
 	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
 			CPUFREQ_ADJUST, new_policy);
-	/* the adjusted frequency should not exceed thermal limit */
-	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
-			CPUFREQ_THERMAL, new_policy);
 
 	/*
 	 * verify the cpu speed can be set within this limit, which might be
@@ -2519,6 +2515,13 @@ int cpufreq_register_driver(struct cpufreq_driver *driver_data)
 	if (cpufreq_disabled())
 		return -ENODEV;
 
+	/*
+	 * The cpufreq core depends heavily on the availability of device
+	 * structure, make sure they are available before proceeding further.
+	 */
+	if (!get_cpu_device(0))
+		return -EPROBE_DEFER;
+
 	if (!driver_data || !driver_data->verify || !driver_data->init ||
 	    !(driver_data->setpolicy || driver_data->target_index ||
 		    driver_data->target) ||
@@ -2623,14 +2626,6 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver)
 }
 EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 
-/*
- * Stop cpufreq at shutdown to make sure it isn't holding any locks
- * or mutexes when secondary CPUs are halted.
- */
-static struct syscore_ops cpufreq_syscore_ops = {
-	.shutdown = cpufreq_suspend,
-};
-
 struct kobject *cpufreq_global_kobject;
 EXPORT_SYMBOL(cpufreq_global_kobject);
 
@@ -2641,8 +2636,6 @@ static int __init cpufreq_core_init(void)
 
 	cpufreq_global_kobject = kobject_create_and_add("cpufreq", &cpu_subsys.dev_root->kobj);
 	BUG_ON(!cpufreq_global_kobject);
-
-	register_syscore_ops(&cpufreq_syscore_ops);
 
 	return 0;
 }

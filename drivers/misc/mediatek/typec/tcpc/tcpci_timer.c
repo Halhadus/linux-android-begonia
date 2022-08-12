@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * TCPC Interface for timer handler
  *
@@ -140,8 +139,8 @@ static inline void tcpc_set_timer_tick(struct tcpc_device *tcpc, int nr)
 	spin_unlock_irqrestore(&tcpc->timer_tick_lock, flags);
 }
 
+#if TCPC_TIMER_DBG_EN || TCPC_TIMER_INFO_EN
 static const char *const tcpc_timer_name[] = {
-
 #ifdef CONFIG_USB_POWER_DELIVERY
 	"PD_TIMER_DISCOVER_ID",
 	"PD_TIMER_BIST_CONT_MODE",
@@ -214,6 +213,9 @@ static const char *const tcpc_timer_name[] = {
 	"TYPEC_RT_TIMER_LOW_POWER_MODE",
 #ifdef CONFIG_USB_POWER_DELIVERY
 	"TYPEC_RT_TIMER_PE_IDLE",
+#ifdef CONFIG_TYPEC_WAIT_BC12
+	"TYPEC_RT_TIMER_SINK_WAIT_BC12",
+#endif /* CONFIG_TYPEC_WAIT_BC12 */
 #endif	/* CONFIG_USB_POWER_DELIVERY */
 	"TYPEC_TIMER_ERROR_RECOVERY",
 /* TYPEC-TRY-TIMER */
@@ -232,6 +234,7 @@ static const char *const tcpc_timer_name[] = {
 	"TYPEC_TIMER_NORP_SRC",
 #endif	/* CONFIG_TYPEC_CAP_NORP_SRC */
 };
+#endif /* TCPC_TIMER_DBG_EN || TCPC_TIMER_INFO_EN */
 /* CONFIG_USB_PD_SAFE0V_DELAY */
 #ifdef CONFIG_TCPC_VSAFE0V_DETECT
 #define PD_TIMER_VSAFE0V_DLY_TOUT		50
@@ -283,7 +286,7 @@ DECL_TCPC_TIMEOUT(PD_TIMER_VCONN_STABLE, 50),
 
 DECL_TCPC_TIMEOUT_RANGE(PD_TIMER_VDM_MODE_ENTRY, 40, 50),
 DECL_TCPC_TIMEOUT_RANGE(PD_TIMER_VDM_MODE_EXIT, 40, 50),
-DECL_TCPC_TIMEOUT_RANGE(PD_TIMER_VDM_RESPONSE, 24, 30),
+DECL_TCPC_TIMEOUT_RANGE(PD_TIMER_VDM_RESPONSE, 28, 30),	/* 24 ~ 30 */
 
 DECL_TCPC_TIMEOUT_RANGE(PD_TIMER_SOURCE_TRANSITION, 25, 35),
 DECL_TCPC_TIMEOUT_RANGE(PD_TIMER_SRC_RECOVER, 660, 1000),
@@ -351,6 +354,9 @@ DECL_TCPC_TIMEOUT(TYPEC_RT_TIMER_LOW_POWER_MODE, 500),
 
 #ifdef CONFIG_USB_POWER_DELIVERY
 DECL_TCPC_TIMEOUT(TYPEC_RT_TIMER_PE_IDLE, 1),
+#ifdef CONFIG_TYPEC_WAIT_BC12
+DECL_TCPC_TIMEOUT(TYPEC_RT_TIMER_SINK_WAIT_BC12, 50),
+#endif /* CONFIG_TYPEC_WAIT_BC12 */
 #endif	/* CONFIG_USB_POWER_DELIVERY */
 DECL_TCPC_TIMEOUT_RANGE(TYPEC_TIMER_ERROR_RECOVERY, 25, 25),
 
@@ -409,7 +415,7 @@ static inline void on_pe_timer_timeout(
 #ifdef CONFIG_USB_PD_RETRY_CRC_DISCARD
 	case PD_TIMER_DISCARD:
 		tcpc_dev->pd_discard_pending = false;
-		pd_put_hw_event(tcpc_dev, PD_HW_TX_FAILED);
+		pd_put_hw_event(tcpc_dev, PD_HW_TX_DISCARD);
 		break;
 #endif	/* CONFIG_USB_PD_RETRY_CRC_DISCARD */
 
@@ -961,6 +967,18 @@ static enum hrtimer_restart tcpc_timer_rt_pe_idle(struct hrtimer *timer)
 	TCPC_TIMER_TRIGGER();
 	return HRTIMER_NORESTART;
 }
+
+#ifdef CONFIG_TYPEC_WAIT_BC12
+static enum hrtimer_restart tcpc_timer_rt_sink_wait_bc12(struct hrtimer *timer)
+{
+	int index = TYPEC_RT_TIMER_SINK_WAIT_BC12;
+	struct tcpc_device *tcpc_dev =
+		container_of(timer, struct tcpc_device, tcpc_timer[index]);
+
+	TCPC_TIMER_TRIGGER();
+	return HRTIMER_NORESTART;
+}
+#endif /* CONFIG_TYPEC_WAIT_BC12 */
 #endif	/* CONFIG_USB_POWER_DELIVERY */
 
 /* TYPEC-TRY-TIMER */
@@ -1169,6 +1187,9 @@ static tcpc_hrtimer_call tcpc_timer_call[PD_TIMER_NR] = {
 	tcpc_timer_rt_low_power_mode,
 #ifdef CONFIG_USB_POWER_DELIVERY
 	tcpc_timer_rt_pe_idle,
+#ifdef CONFIG_TYPEC_WAIT_BC12
+	tcpc_timer_rt_sink_wait_bc12,
+#endif /* CONFIG_TYPEC_WAIT_BC12 */
 #endif	/* CONFIG_USB_POWER_DELIVERY */
 	tcpc_timer_error_recovery,
 /* TYPEC-TRY-TIMER */
@@ -1221,7 +1242,7 @@ static inline void tcpc_reset_timer_range(
 
 	mask = tcpc_get_timer_enable_mask(tcpc);
 
-	for (i = start; i <= end; i++) {
+	for (i = start; i < end; i++) {
 		if (mask & RT_MASK64(i)) {
 			hrtimer_try_to_cancel(&tcpc->tcpc_timer[i]);
 			tcpc_clear_timer_enable_mask(tcpc, i);
@@ -1427,12 +1448,14 @@ int tcpci_timer_deinit(struct tcpc_device *tcpc_dev)
 	mask = tcpc_get_timer_enable_mask(tcpc_dev);
 
 	mutex_lock(&tcpc_dev->timer_lock);
+	tcpc_dev->timer_thead_stop = true;
 	wake_up_interruptible(&tcpc_dev->timer_wait_que);
 	kthread_stop(tcpc_dev->timer_task);
 	for (i = 0; i < PD_TIMER_NR; i++) {
 		if (mask & RT_MASK64(i))
 			hrtimer_try_to_cancel(&tcpc_dev->tcpc_timer[i]);
 	}
+	wakeup_source_trash(&tcpc_dev->wakeup_wake_lock);
 
 	pr_info("%s : de init OK\n", __func__);
 	mutex_unlock(&tcpc_dev->timer_lock);

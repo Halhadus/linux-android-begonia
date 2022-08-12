@@ -4,14 +4,6 @@
 
 menu "Misc devices"
 
-config SPI_XIAOMI_TP
-	bool
-	depends on SPI
-	default y if TOUCHSCREEN_NT36xxx_HOSTDL_SPI
-	default y if TOUCHSCREEN_FTS
-	help
-	  Say Y if want use xiaomi touch panel.
-
 config SENSORS_LIS3LV02D
 	tristate
 	depends on INPUT
@@ -457,6 +449,16 @@ config USB_SWITCH_FSA9480
 	  stereo and mono audio, video, microphone and UART data to use
 	  a common connector port.
 
+config USB_SWITCH_FSA4480
+	bool "Fairchild FSA4480 chip"
+	select REGMAP_I2C
+	depends on I2C
+	help
+	  Support for the Fairchild FSA4480 IC switch chip controlled
+	  using I2C. This driver provides common support
+	  for accessing the device, switching between USB and Audio
+	  modes, changing orientation.
+
 config LATTICE_ECP3_CONFIG
 	tristate "Lattice ECP3 FPGA bitstream configuration via SPI"
 	depends on SPI && SYSFS
@@ -480,6 +482,16 @@ config SRAM
 
 config SRAM_EXEC
 	bool
+
+config ACCESS_RAMOOPS
+	tristate "Driver to allow access for decrypting encrypted ramoops"
+	depends on PSTORE_CONSOLE
+	help
+	  This driver allows userspace to access the ramoops and ramoops
+	  metadata carveouts to decrypt the ramoops.
+	  Enable access_ramoops in default config and add device tree entry
+	  for the Resume on Reboot feature.
+	  Say 'y' if ramoops is encrypted.
 
 config VEXPRESS_SYSCFG
 	bool "Versatile Express System Configuration driver"
@@ -534,6 +546,19 @@ config MEMORY_STATE_TIME
 	depends on PROFILING
 	help
 	  Memory time statistics exported to /sys/kernel/memory_state_time
+
+config FACTORY_BUILD
+	bool "distiguish factory version from dev version"
+	default n
+	help
+	  This macro will be defined when build factory version. It is used to
+	  distinguish factory and dev codes in kernel.
+
+config GPIO_TESTING_MODE
+	tristate "A simple GPIO testing mode driver"
+	default n
+	help
+	  Enable driver for a simple testing mode detection
 
 config SIMTRAY_STATUS
 	tristate "Xiaomi SIM tray status"

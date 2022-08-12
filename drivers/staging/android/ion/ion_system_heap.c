@@ -2,7 +2,7 @@
  * drivers/staging/android/ion/ion_system_heap.c
  *
  * Copyright (C) 2011 Google, Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -398,6 +398,8 @@ static int ion_system_contig_heap_allocate(struct ion_heap *heap,
 	len = PAGE_ALIGN(len);
 	for (i = len >> PAGE_SHIFT; i < (1 << order); i++)
 		__free_page(page + i);
+	for (i = 0; i < (len >> PAGE_SHIFT); i++)
+		SetPageIommu(&page[i]);
 	atomic64_add_return((len >> PAGE_SHIFT), &page_sz_cnt);
 	table = kmalloc(sizeof(*table), GFP_KERNEL);
 	if (!table) {

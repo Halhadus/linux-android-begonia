@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -155,6 +155,12 @@ int flashlight_verify_ct_index(int ct_index);
 int flashlight_verify_part_index(int part_index);
 int flashlight_verify_index(int type_index, int ct_index, int part_index);
 
+#ifdef CONFIG_MTK_FLASHLIGHT_PT
+int flashlight_pt_is_low(void);
+#endif
+#ifdef CONFIG_MTK_FLASHLIGHT_DLPT
+void flashlight_kicker_pbm(bool status);
+#endif
 
 #endif /* _FLASHLIGHT_CORE_H */
 

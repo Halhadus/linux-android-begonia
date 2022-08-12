@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 1999-2002 Vojtech Pavlik
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -41,7 +41,7 @@ struct input_value {
 #define TOUCH_EVENT_MAX 512
 #define TOUCH_MAX_FINGER 10
 enum {
-	TOUCH_IS_INIT	=	0,
+	TOUCH_IS_INIT = 0,
 	TOUCH_IS_PRESSED,
 	TOUCH_IS_RELEASED,
 };
@@ -63,7 +63,6 @@ struct touch_event_info {
 	struct touch_event touch_event_buf[TOUCH_EVENT_MAX];
 };
 #endif
-
 
 /**
  * struct input_dev - represents an input device

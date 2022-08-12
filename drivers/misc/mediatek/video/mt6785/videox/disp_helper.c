@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -156,6 +156,8 @@ static struct {
 	{DISP_OPT_OVL_SBCH, 0, "DISP_OPT_OVL_SBCH"},
 	{DISP_OPT_MMPATH, 0, "DISP_OPT_MMPATH"},
 	{DISP_OPT_TUI_MODE, 0, "DISP_OPT_TUI_MODE"},
+	/*DynFPS*/
+	{DISP_OPT_DYNAMIC_FPS, 0, "DISP_OPT_DYNAMIC_FPS"},
 };
 
 const char *disp_helper_option_spy(enum DISP_HELPER_OPT option)
@@ -442,6 +444,8 @@ void disp_helper_option_init(void)
 	disp_helper_set_option(DISP_OPT_OVL_SBCH, 1);
 	disp_helper_set_option(DISP_OPT_MMPATH, 0);
 	disp_helper_set_option(DISP_OPT_TUI_MODE, 0);
+	/*DynFPS*/
+	disp_helper_set_option(DISP_OPT_DYNAMIC_FPS, 1);
 }
 
 int disp_helper_get_option_list(char *stringbuf, int buf_len)

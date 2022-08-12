@@ -2,7 +2,7 @@
 this file is only for attribution of begonia
 */
 #include "xiaomi-mt6785-common.dtsi"
-#include "novatek-nt36xxx-spi.dtsi"
+#include "novatek-nt36xxx-spi_g7.dtsi"
 #include "cust_mt6785_camera.dtsi"
 
 /******GOODIX, FPC FINGERPRINT start ******/
@@ -56,14 +56,6 @@ this file is only for attribution of begonia
 };
 /****** GOODIX, FPC FINGERPRINT end *******/
 
-&odm {
-	simtray {
-		compatible = "xiaomi,simtray-status";
-		status-gpio =	<&pio 140 0>,
-				<&pio 141 1>;
-	};
-};
-
 /****** SPI FOR TP start *******/
 &spi5 {
 	#address-cells = <1>;
@@ -76,6 +68,17 @@ this file is only for attribution of begonia
 	};
 };
 
+&odm {
+	simtray {
+		compatible = "xiaomi,simtray-status";
+		status-gpio =	<&pio 140 0>,
+				<&pio 141 1>;
+	};
+};
+
+/****** SPI FOR TP end *********/
+
+/****** SPI FOR NFC start*******/
 &spi1 {
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -86,22 +89,16 @@ this file is only for attribution of begonia
 		status = "okay";
 	};
 };
-
-&ts_focal {
-	compatible = "focaltech,fts";
-	status = "ok";
-	spi-max-frequency = <4500000>; //4.5M
-	focaltech,reset-gpio = <&pio 2 0x00>;
-	focaltech,irq-gpio = <&pio 1 0x2002>;	//ONESHOT|FALLING
-	focaltech,max-touch-number = <10>;
-	focaltech,display-coords =  <0 0 1080 2340>;
-};
-/****** SPI FOR TP end *********/
+/****** SPI FOR NFC end*******/
 
 &xiaomi_touch {
 	compatible = "xiaomi-touch";
 	status = "ok";
 	touch,name = "xiaomi-touch";
+};
+
+&thermal_message {
+	board-sensor = "VIRTUAL-SENSOR";
 };
 
 &i2c8 {
@@ -130,7 +127,7 @@ this file is only for attribution of begonia
 &lk_charger  {
 	/* charging current */
 	ac_charger_current = <1000000>;
-	non_std_ac_charger_current = <1000000>;
+	non_std_ac_charger_current = <500000>;
 
 	/* battery temperature protection */
 	temp_t4_threshold = <60>;
@@ -150,7 +147,7 @@ this file is only for attribution of begonia
 	chg2_ta_ac_charger_current = <1800000>;
 	parallel_vbus;
 	pd_vbus_upper_bound = <9000000>;
-	non_std_ac_charger_current = <1000000>;
+	non_std_ac_charger_current = <500000>;
 	pe40_dual_charger_chg1_current = <1700000>;
 	pe40_dual_charger_chg2_current = <1800000>;
 	/* sw jeita */
@@ -208,8 +205,4 @@ this file is only for attribution of begonia
 		u2_term_ref = <4>;
 		u2_enhance  = <1>;
 	};
-};
-
-&thermal_message {
-	board-sensor = "VIRTUAL-SENSOR";
 };

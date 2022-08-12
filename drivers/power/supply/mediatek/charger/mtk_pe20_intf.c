@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -233,7 +232,7 @@ static int pe20_set_ta_vchr(struct charger_manager *pinfo, u32 chr_volt)
 	int ret = 0;
 	int vchr_before, vchr_after, vchr_delta;
 	const u32 sw_retry_cnt_max = 3;
-	const u32 retry_cnt_max = 3;
+	const u32 retry_cnt_max = 5;
 	u32 sw_retry_cnt = 0, retry_cnt = 0;
 	struct mtk_pe20 *pe20 = &pinfo->pe2;
 
@@ -373,7 +372,6 @@ static int pe20_detect_ta(struct charger_manager *pinfo)
 {
 	int ret;
 	struct mtk_pe20 *pe20 = &pinfo->pe2;
-	struct mt_charger	*mt_chg = power_supply_get_drvdata(pinfo->usb_psy);
 
 	chr_debug("%s: starts\n", __func__);
 	pe20->ta_vchr_org = pe20_get_vbus();
@@ -382,7 +380,7 @@ static int pe20_detect_ta(struct charger_manager *pinfo)
 	ret = pe20_enable_vbus_ovp(pinfo, false);
 	if (ret < 0)
 		goto err;
-	charger_dev_enable(pinfo->chg2_dev, false);
+
 	if (abs(pe20->ta_vchr_org - 8500000) > 500000)
 		ret = pe20_set_ta_vchr(pinfo, 8500000);
 	else
@@ -394,8 +392,6 @@ static int pe20_detect_ta(struct charger_manager *pinfo)
 	}
 
 	pe20->is_connect = true;
-	mt_chg->usb_desc.type = POWER_SUPPLY_TYPE_USB_HVDCP;
-	power_supply_changed(pinfo->usb_psy);
 	chr_info("%s: OK\n", __func__);
 
 	return ret;
@@ -752,10 +748,10 @@ int mtk_pe20_init(struct charger_manager *pinfo)
 	pinfo->pe2.profile[3].vchr = 9000000;
 	pinfo->pe2.profile[4].vchr = 9000000;
 	pinfo->pe2.profile[5].vchr = 9000000;
-	pinfo->pe2.profile[6].vchr = 9000000;
-	pinfo->pe2.profile[7].vchr = 9000000;
-	pinfo->pe2.profile[8].vchr = 9000000;
-	pinfo->pe2.profile[9].vchr = 9000000;
+	pinfo->pe2.profile[6].vchr = 9500000;
+	pinfo->pe2.profile[7].vchr = 9500000;
+	pinfo->pe2.profile[8].vchr = 10000000;
+	pinfo->pe2.profile[9].vchr = 10000000;
 
 	ret = charger_dev_set_pe20_efficiency_table(pinfo->chg1_dev);
 	if (ret != 0)

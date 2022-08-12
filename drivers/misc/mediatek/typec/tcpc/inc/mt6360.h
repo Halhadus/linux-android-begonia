@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2018 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -211,7 +210,6 @@ enum mt6360_id_rupsel {
  */
 
 #define MT6360_M_VCONN_SHT_GND			BIT(3)
-#define MT6360_M_OTD				BIT(2)
 #define MT6360_M_VBUS_SAFE0V			BIT(1)
 #define MT6360_M_WAKEUP				BIT(0)
 
@@ -240,20 +238,15 @@ enum mt6360_id_rupsel {
 #define MT6360_M_HIDET_CC1			BIT(4)
 #define MT6360_M_LODET_CC2			BIT(3)
 #define MT6360_M_LODET_CC1			BIT(2)
-#define MT6360_M_RADET_CC2			BIT(1)
-#define MT6360_M_RADET_CC1			BIT(0)
 #define MT6360_M_HIDET_CC \
 	(MT6360_M_HIDET_CC2 | MT6360_M_HIDET_CC1)
 #define MT6360_M_LODET_CC \
 	(MT6360_M_LODET_CC2 | MT6360_M_LODET_CC1)
-#define MT6360_M_RADET_CC \
-	(MT6360_M_RADET_CC2 | MT6360_M_RADET_CC1)
 
 /*
  * MT6360_REG_MT_INT1				(0x96)
  */
 
-#define MT6360_INT_OTD				BIT(2)
 #define MT6360_INT_VBUS_80			BIT(1)
 #define MT6360_INT_WAKEUP			BIT(0)
 
@@ -269,7 +262,6 @@ enum mt6360_id_rupsel {
  */
 
 #define MT6360_ST_VCONN_SHT_GND			BIT(3)
-#define MT6360_ST_OTD				BIT(2)
 #define MT6360_ST_VBUS_SAFE0V			BIT(1)
 
 /*
@@ -298,14 +290,10 @@ enum mt6360_id_rupsel {
 #define MT6360_ST_HIDET_CC1			BIT(4)
 #define MT6360_ST_LODET_CC2			BIT(3)
 #define MT6360_ST_LODET_CC1			BIT(2)
-#define MT6360_ST_RADET_CC2			BIT(1)
-#define MT6360_ST_RADET_CC1			BIT(0)
 #define MT6360_ST_HIDET_CC \
 	(MT6360_ST_HIDET_CC2 | MT6360_ST_HIDET_CC1)
 #define MT6360_ST_LODET_CC \
 	(MT6360_ST_LODET_CC2 | MT6360_ST_LODET_CC1)
-#define MT6360_ST_RADET_CC \
-	(MT6360_ST_RADET_CC2 | MT6360_ST_RADET_CC1)
 
 /*
  * MT6360_REG_WATCHDOG_CTRL			(0xBE)
@@ -397,7 +385,6 @@ enum mt6360_id_rupsel {
  */
 #define MT6360_DIS_RPDET			BIT(7)
 #define MT6360_RPDET_ONESHOT			BIT(6)
-#define MT6360_OT_CCOPEN_EN			BIT(5)
 
 #if ENABLE_MT6360_DBG
 #define MT6360_INFO(format, args...) \

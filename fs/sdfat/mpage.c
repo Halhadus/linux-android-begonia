@@ -2,6 +2,7 @@
  * fs/mpage.c
  *
  * Copyright (C) 2002, Linus Torvalds.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * Contains functions related to preparing and submitting BIOs which contain
  * multiple pagecache pages.

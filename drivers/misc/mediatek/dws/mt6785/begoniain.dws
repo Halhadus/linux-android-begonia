@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--dct_version="2.5" buid_sn="161102" dws_modification_time="06.17.2019.10:15:35"-->
+<!--dct_version="2.5" buid_sn="161102" dws_modification_time="05.03.2019.16:39:40"-->
 <dct_cfg>
     <general chip="MT6785">
         <proj>MT6785_Phone</proj>
@@ -2292,11 +2292,6 @@
                 <channel>I2C_CHANNEL_5</channel>
                 <address>0x64</address>
             </device18>
-            <device19>
-                <varName>SPEAKER_AMP</varName>
-                <channel>I2C_CHANNEL_6</channel>
-                <address>0x34</address>
-            </device19>
             <device20>
                 <varName>I2C_LCD_BIAS</varName>
                 <channel>I2C_CHANNEL_0</channel>

@@ -56,6 +56,7 @@
 
 #include <linux/swapops.h>
 #include <linux/balloon_compaction.h>
+#include <linux/rtmm.h>
 
 #include "internal.h"
 
@@ -1011,8 +1012,6 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			goto keep;
 
 		VM_BUG_ON_PAGE(PageActive(page), page);
-		if (pgdat)
-			VM_BUG_ON_PAGE(page_pgdat(page) != pgdat, page);
 
 		sc->nr_scanned++;
 
@@ -1101,8 +1100,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			/* Case 1 above */
 			if (current_is_kswapd() &&
 			    PageReclaim(page) &&
-			    (pgdat &&
-				test_bit(PGDAT_WRITEBACK, &pgdat->flags))) {
+			    test_bit(PGDAT_WRITEBACK, &pgdat->flags)) {
 				nr_immediate++;
 				goto activate_locked;
 
@@ -1224,8 +1222,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			 */
 			if (page_is_file_cache(page) &&
 			    (!current_is_kswapd() || !PageReclaim(page) ||
-			     (pgdat &&
-				!test_bit(PGDAT_DIRTY, &pgdat->flags)))) {
+			     !test_bit(PGDAT_DIRTY, &pgdat->flags))) {
 				/*
 				 * Immediately reclaim when written back.
 				 * Similar in principal to deactivate_page()
@@ -1351,13 +1348,6 @@ free_it:
 			(*get_compound_page_dtor(page))(page);
 		} else
 			list_add(&page->lru, &free_pages);
-		/*
-		 * If pagelist are from multiple nodes, we should decrease
-		 * NR_ISOLATED_ANON + x on freed pages in here.
-		 */
-		if (!pgdat)
-			dec_node_page_state(page, NR_ISOLATED_ANON +
-					page_is_file_cache(page));
 		continue;
 
 activate_locked:
@@ -1431,6 +1421,8 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 unsigned long reclaim_pages_from_list(struct list_head *page_list,
 					struct vm_area_struct *vma)
 {
+	unsigned long nr_isolated[2] = {0, };
+	struct pglist_data *pgdat = NULL;
 	struct scan_control sc = {
 		.gfp_mask = GFP_KERNEL,
 		.priority = DEF_PRIORITY,
@@ -1443,19 +1435,35 @@ unsigned long reclaim_pages_from_list(struct list_head *page_list,
 	unsigned long nr_reclaimed;
 	struct page *page;
 
-	list_for_each_entry(page, page_list, lru)
-		ClearPageActive(page);
+	if (list_empty(page_list))
+		return 0;
 
-	nr_reclaimed = shrink_page_list(page_list, NULL, &sc,
+	list_for_each_entry(page, page_list, lru) {
+		ClearPageActive(page);
+		if (pgdat == NULL)
+			pgdat = page_pgdat(page);
+		/* XXX: It could be multiple node in other config */
+		WARN_ON_ONCE(pgdat != page_pgdat(page));
+		if (!page_is_file_cache(page))
+			nr_isolated[0]++;
+		else
+			nr_isolated[1]++;
+	}
+
+	mod_node_page_state(pgdat, NR_ISOLATED_ANON, nr_isolated[0]);
+	mod_node_page_state(pgdat, NR_ISOLATED_FILE, nr_isolated[1]);
+
+	nr_reclaimed = shrink_page_list(page_list, pgdat, &sc,
 			TTU_IGNORE_ACCESS, NULL, true);
 
 	while (!list_empty(page_list)) {
 		page = lru_to_page(page_list);
 		list_del(&page->lru);
-		dec_node_page_state(page, NR_ISOLATED_ANON +
-				page_is_file_cache(page));
 		putback_lru_page(page);
 	}
+
+	mod_node_page_state(pgdat, NR_ISOLATED_ANON, -nr_isolated[0]);
+	mod_node_page_state(pgdat, NR_ISOLATED_FILE, -nr_isolated[1]);
 
 	return nr_reclaimed;
 }
@@ -2318,6 +2326,10 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 		goto out;
 	}
 
+	if (unlikely(rtmm_reclaim(current->comm))) {
+		swappiness = rtmm_reclaim_swappiness();
+	}
+
 	/*
 	 * Global reclaim will swap to prevent OOM even with no
 	 * swappiness, but memcg users want to use this knob to
@@ -2392,7 +2404,7 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	 * system is under heavy pressure.
 	 */
 	if (!inactive_list_is_low(lruvec, true, sc, false) &&
-	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority) {
+	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority && (swappiness != 200)) {
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
@@ -2473,10 +2485,13 @@ out:
 			/*
 			 * Scan types proportional to swappiness and
 			 * their relative recent reclaim efficiency.
-			 * Make sure we don't miss the last page
-			 * because of a round-off error.
+			 * Make sure we don't miss the last page on
+			 * the offlined memory cgroups because of a
+			 * round-off error.
 			 */
-			scan = DIV64_U64_ROUND_UP(scan * fraction[file],
+			scan = mem_cgroup_online(memcg) ?
+			       div64_u64(scan * fraction[file], denominator) :
+			       DIV64_U64_ROUND_UP(scan * fraction[file],
 						  denominator);
 			break;
 		case SCAN_FILE:
@@ -3888,6 +3903,45 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
 	return nr_reclaimed;
 }
 #endif /* CONFIG_HIBERNATION */
+
+#ifdef CONFIG_RTMM
+/*
+  * reclaim anon/file pages from global lru
+  *
+  * TODO: merge with shrink_all_memory()??
+  */
+unsigned long reclaim_global(unsigned long nr_to_reclaim)
+{
+	struct reclaim_state reclaim_state;
+	struct scan_control sc = {
+		.nr_to_reclaim = max(nr_to_reclaim, SWAP_CLUSTER_MAX),
+		.gfp_mask = GFP_HIGHUSER_MOVABLE,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.order = 0,
+		.priority = DEF_PRIORITY,
+		.may_writepage = 1,
+		.may_unmap = 1,
+		.may_swap = 1,
+	};
+	struct zonelist *zonelist = node_zonelist(numa_node_id(), sc.gfp_mask);
+	struct task_struct *p = current;
+	unsigned long nr_reclaimed;
+	unsigned int noreclaim_flag;
+
+	noreclaim_flag = memalloc_noreclaim_save();
+	fs_reclaim_acquire(sc.gfp_mask);
+	reclaim_state.reclaimed_slab = 0;
+	p->reclaim_state = &reclaim_state;
+
+	nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
+
+	p->reclaim_state = NULL;
+	fs_reclaim_release(sc.gfp_mask);
+	memalloc_noreclaim_restore(noreclaim_flag);
+
+	return nr_reclaimed;
+}
+#endif
 
 /* It's optimal to keep kswapds on the same CPUs as their memory, but
    not required for correctness.  So if the last cpu in a node goes

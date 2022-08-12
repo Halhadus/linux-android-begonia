@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -105,6 +104,8 @@
 #define CONFIG_TCPC_SHUTDOWN_VBUS_DISABLE
 
 #define CONFIG_TCPC_NOTIFIER_LATE_SYNC
+
+#define CONFIG_TCPC_NOTIFICATION_NON_BLOCKING
 
 #ifdef CONFIG_USB_POWER_DELIVERY
 
@@ -254,9 +255,11 @@
 #define CONFIG_USB_PD_RANDOM_FLOW_DELAY
 
 #define CONFIG_USB_PD_DFP_FLOW_DELAY
-/* #define CONFIG_USB_PD_DFP_FLOW_DELAY_STARTUP */
+#define CONFIG_USB_PD_DFP_FLOW_DELAY_STARTUP
 #define CONFIG_USB_PD_DFP_FLOW_DELAY_DRSWAP
 #define CONFIG_USB_PD_DFP_FLOW_DELAY_RESET
+
+#define CONFIG_USB_PD_DISCARD_AND_UNEXPECT_MSG
 
 /* Only in startup */
 #define CONFIG_USB_PD_UFP_FLOW_DELAY
@@ -383,6 +386,9 @@
 #define CONFIG_USB_PD_PPS_REQUEST_INTERVAL	7000
 #endif	/* CONFIG_USB_PD_PPS_REQUEST_INTERVAL */
 
+#ifdef CONFIG_MTK_CHARGER
+#define CONFIG_TYPEC_WAIT_BC12
+#endif /* CONFIG_MTK_CHARGER */
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
 /* debug config */
@@ -394,8 +400,6 @@
  * TypeC Shield Protection
  **********************************************************/
 
-#define CONFIG_TYPEC_OTP
-
 #ifdef CONFIG_MTK_TYPEC_WATER_DETECT
 #define CONFIG_WATER_DETECTION
 #endif /* CONFIG_MTK_TYPEC_WATER_DETECT */
@@ -405,6 +409,10 @@
 /* #define CONFIG_WATER_CALIBRATION */
 #define CONFIG_WD_SBU_CALIB_INIT	1800 /* mV */
 #define CONFIG_WD_SBU_PL_BOUND		200 /* mV */
+#define CONFIG_WD_SBU_PL_LBOUND_C2C	1100 /* mV */
+#define CONFIG_WD_SBU_PL_UBOUND_C2C	2600 /* mV */
+#define CONFIG_WD_SBU_PL_RETRY		2
+#define CONFIG_WD_SBU_PH_RETRY		2
 #define CONFIG_WD_SBU_PH_AUDDEV		200 /* mV */
 #define CONFIG_WD_SBU_PH_LBOUND		1180 /* mV */
 #define CONFIG_WD_SBU_PH_LBOUND1_C2C	2850 /* mV */

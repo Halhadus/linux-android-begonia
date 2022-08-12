@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -35,8 +35,11 @@
 #include <tmp_bts.h>
 #include <linux/slab.h>
 #if defined(CONFIG_MEDIATEK_MT6577_AUXADC)
+#include <linux/of.h>
 #include <linux/iio/consumer.h>
+#include <linux/iio/iio.h>
 #endif
+#include <tscpu_settings.h>
 /*=============================================================
  *Weak functions
  *=============================================================
@@ -113,10 +116,11 @@ do {                                    \
 
 
 #define mtkts_bts_printk(fmt, args...) \
-pr_debug("[Thermal/TZ/BTS]" fmt, ##args)
+pr_notice("[Thermal/TZ/BTS]" fmt, ##args)
 
 #if defined(CONFIG_MEDIATEK_MT6577_AUXADC)
 struct iio_channel *thermistor_ch0;
+static int g_ADC_channel;
 #endif
 /* #define INPUT_PARAM_FROM_USER_AP */
 
@@ -507,7 +511,8 @@ static __s16 mtkts_bts_thermistor_conver_temp(__s32 Res)
 	int i = 0;
 	int asize = 0;
 	__s32 RES1 = 0, RES2 = 0;
-	__s32 TAP_Value = -200, TMP1 = 0, TMP2 = 0;
+	//__s32 TAP_Value = -200, TMP1 = 0, TMP2 = 0;
+	__s32 TAP_Value = -2000, TMP1 = 0, TMP2 = 0;
 
 	asize = (ntc_tbl_size / sizeof(struct BTS_TEMPERATURE));
 
@@ -515,9 +520,11 @@ static __s16 mtkts_bts_thermistor_conver_temp(__s32 Res)
 	 * asize = %d, Res = %d\n",asize,Res);
 	 */
 	if (Res >= BTS_Temperature_Table[0].TemperatureR) {
-		TAP_Value = -40;	/* min */
+		//TAP_Value = -40;	/* min */
+		TAP_Value = -400;    /* min */
 	} else if (Res <= BTS_Temperature_Table[asize - 1].TemperatureR) {
-		TAP_Value = 125;	/* max */
+		//TAP_Value = 125;	/* max */
+		TAP_Value = 1250;    /* max */
 	} else {
 		RES1 = BTS_Temperature_Table[0].TemperatureR;
 		TMP1 = BTS_Temperature_Table[0].BTS_Temp;
@@ -541,7 +548,7 @@ static __s16 mtkts_bts_thermistor_conver_temp(__s32 Res)
 			 */
 		}
 
-		TAP_Value = (((Res - RES2) * TMP1) + ((RES1 - Res) * TMP2))
+		TAP_Value = (((Res - RES2) * TMP1) + ((RES1 - Res) * TMP2))*10
 								/ (RES1 - RES2);
 	}
 
@@ -711,17 +718,18 @@ int mtkts_bts_get_hw_temp(void)
 	/* get HW AP temp (TSAP) */
 	/* cat /sys/class/power_supply/AP/AP_temp */
 	t_ret = get_hw_bts_temp();
-	t_ret = t_ret * 1000;
+	t_ret = t_ret * 100;
 
 	mutex_unlock(&BTS_lock);
 
-
 	if ((tsatm_thermal_get_catm_type() == 2) &&
-		(tsdctm_thermal_get_ttj_on() == 0))
+		(tsdctm_thermal_get_ttj_on() == 0)) {
 		t_ret2 = wakeup_ta_algo(TA_CATMPLUS_TTJ);
 
-	if (t_ret2 < 0)
-		pr_notice("[Thermal/TZ/BTS]wakeup_ta_algo out of memory\n");
+		if (t_ret2 < 0)
+			pr_notice("[Thermal/TZ/BTS]wakeup_ta_algo %d\n",
+				t_ret2);
+	}
 
 	bts_cur_temp = t_ret;
 
@@ -738,6 +746,13 @@ static int mtkts_bts_get_temp(struct thermal_zone_device *thermal, int *t)
 
 	/* if ((int) *t > 52000) */
 	/* mtkts_bts_dprintk("T=%d\n", (int) *t); */
+
+#ifdef CONFIG_LVTS_DYNAMIC_ENABLE_REBOOT
+	if (*t > DYNAMIC_REBOOT_TRIP_TEMP)
+		lvts_enable_all_hw_protect();
+	else if (*t < DYNAMIC_REBOOT_EXIT_TEMP)
+		lvts_disable_all_hw_protect();
+#endif
 
 	if ((int)*t >= polling_trip_temp1)
 		thermal->polling_delay = interval * 1000;
@@ -1157,8 +1172,11 @@ static int mtkts_bts_param_read(struct seq_file *m, void *v)
 	seq_printf(m, "%d\n", g_RAP_pull_up_voltage);
 	seq_printf(m, "%d\n", g_TAP_over_critical_low);
 	seq_printf(m, "%d\n", g_RAP_ntc_table);
+#if defined(CONFIG_MEDIATEK_MT6577_AUXADC)
+	seq_printf(m, "%d\n", g_ADC_channel);
+#else
 	seq_printf(m, "%d\n", g_RAP_ADC_channel);
-
+#endif
 	return 0;
 }
 
@@ -1420,6 +1438,10 @@ static int mtkts_bts_probe(struct platform_device *pdev)
 			__func__, ret);
 		return ret;
 	}
+
+	g_ADC_channel = thermistor_ch0->channel->channel;
+	mtkts_bts_printk("[%s]get auxadc iio ch: %d\n", __func__,
+		thermistor_ch0->channel->channel);
 
 	return err;
 }

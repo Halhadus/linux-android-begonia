@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -210,7 +210,6 @@ void atm_ctrl_cmd_from_user(void *nl_data, struct tad_nl_msg_t *ret_msg)
 		{
 			memcpy(&g_tad_ttj, &msg->tad_data[0],
 						sizeof(g_tad_ttj));
-
 			tsta_dprintk(
 				"[%s] g_tad_ttj = %d\n", __func__,
 								g_tad_ttj);

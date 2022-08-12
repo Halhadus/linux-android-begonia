@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -219,7 +219,7 @@ static int phy_slew_rate_calibration(struct mtk_phy_instance *instance)
 }
 
 #ifdef CONFIG_MTK_UART_USB_SWITCH
-static bFirstUartCheck = true;
+static bool bFirstUartCheck = true;
 static bool phy_check_in_uart_mode(struct mtk_phy_instance *instance);
 #endif
 

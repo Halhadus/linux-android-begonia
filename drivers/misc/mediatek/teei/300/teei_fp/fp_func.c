@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2019, MICROTRUST Incorporated
+ * Copyright (C) 2021 XiaoMi, Inc.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -31,7 +32,6 @@
 #include "fp_func.h"
 #include "../tz_driver/include/teei_fp.h"
 #include "../tz_driver/include/teei_id.h"
-#include "../tz_driver/include/tz_service.h"
 #include "../tz_driver/include/nt_smc_call.h"
 #include "../tz_driver/include/utdriver_macro.h"
 #include "../tz_driver/include/teei_client_main.h"
@@ -124,46 +124,45 @@ static long fp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		IMSG_INFO("CMD FP MEM CLEAR.\n");
 		break;
 	case CMD_FP_CMD:
-	if (copy_from_user((void *)args, (void *)arg, 16)) {
-		IMSG_ERROR("copy args from user failed.\n");
-		up(&fp_api_lock);
-		return -EFAULT;
-	}
+		if (copy_from_user((void *)args, (void *)arg, 16)) {
+			IMSG_ERROR("copy args from user failed.\n");
+			up(&fp_api_lock);
+			return -EFAULT;
+		}
+
 		/* TODO compute args length */
 		/* [11-15] is the length of data */
 		args_len = *((unsigned int *)(args + 12));
 
 		if (args_len + 16 > MICROTRUST_FP_SIZE) {
-			IMSG_ERROR("args_len is invalid!.\n");
+			IMSG_ERROR("args_len=%d is invalid!.\n", args_len);
 			up(&fp_api_lock);
 			return -EFAULT;
 		}
 
-		if (copy_from_user((void *)fp_buff_addr, (void *)arg,
-				args_len + 16)) {
-			IMSG_ERROR("copy from user failed.\n");
-			up(&fp_api_lock);
-			return -EFAULT;
-		}
+		teei_cpus_write_lock();
 
-		ret  = send_fp_command((void *)fp_buff_addr, args_len + 16);
+		ret  = send_fp_command((void *)arg, args_len + 16);
+
+		teei_cpus_write_unlock();
+
 		if (ret) {
 			IMSG_ERROR("transfer data to ta failed.\n");
 			up(&fp_api_lock);
 			return -EFAULT;
 		}
-		if (copy_to_user((void *)arg, (void *)fp_buff_addr,
-						args_len + 16)) {
-			IMSG_ERROR("copy from user failed.\n");
-			up(&fp_api_lock);
-			return -EFAULT;
-		}
+
 		break;
 	case CMD_FP_LOAD_TEE:
 #ifdef FP_DEBUG
 		IMSG_DEBUG("case CMD_FP_LOAD_TEE\n");
 #endif
 		complete(&boot_decryto_lock);
+		break;
+	case CMD_TEEI_SET_PRI:
+		ret = teei_set_switch_pri(arg);
+		if (ret != 0)
+			IMSG_ERROR("Failed to teei_set_switch_pri %d\n", ret);
 		break;
 	default:
 		up(&fp_api_lock);

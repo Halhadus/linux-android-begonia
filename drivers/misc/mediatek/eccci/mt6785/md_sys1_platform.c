@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -61,7 +60,7 @@ static struct ccci_clk_node clk_table[] = {
 	{ NULL, "infra-ccif4-md"},
 };
 
-unsigned int devapc_check_flag = 1;
+unsigned int devapc_check_flag;
 #define TAG "mcd"
 
 #define ROr2W(a, b, c)  ccci_write32(a, b, (ccci_read32(a, b)|c))
@@ -271,7 +270,7 @@ void ccci_set_clk_by_id(int idx, unsigned int on)
 {
 	int ret = 0;
 
-	if (idx >= ARRAY_SIZE(clk_table))
+	if (idx >= ARRAY_SIZE(clk_table) || idx < 0)
 		return;
 	else if (clk_table[idx].clk_ref == NULL)
 		return;

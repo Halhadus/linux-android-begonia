@@ -1,6 +1,6 @@
 /************************************************************************
 * Copyright (C) 2012-2019, Focaltech Systems (R)£¬All Rights Reserved.
-* Copyright (C) 2020 XiaoMi, Inc.
+* Copyright (C) 2021 XiaoMi, Inc.
 *
 * File Name: focaltech_test.h
 *
@@ -227,6 +227,8 @@ struct incell_threshold_b {
 	int rawdata2_min;
 	int rawdata2_max;
 	int mux_open_cb_min;
+	int open_delta_V;
+    	int open_diff_min;
 };
 
 struct incell_threshold {
@@ -510,6 +512,7 @@ enum csv_itemcode_sc {
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 extern struct test_funcs test_func_ft8719;
+extern struct test_funcs test_func_ft8720;
 
 extern struct fts_test *fts_ftest;
 
@@ -563,8 +566,8 @@ void fts_test_save_data(char *name, int code, int *data, int datacnt,
 	} \
 } while (0)
 
-#define CSV_SUPPORT			 0
-#define TXT_SUPPORT			 0
+#define CSV_SUPPORT			 1
+#define TXT_SUPPORT			 1
 
 #define FTS_TEST_DBG(fmt, args...) do { \
 printk("[FTS_TS][TEST]%s:"fmt"\n",  __func__, ##args); \

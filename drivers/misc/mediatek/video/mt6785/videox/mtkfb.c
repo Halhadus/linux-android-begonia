@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -2809,10 +2809,9 @@ static int mtkfb_probe(struct platform_device *pdev)
 	 * this function will get fb_heap base address to ion
 	 * for management frame buffer
 	 */
-//#ifdef MTK_FB_ION_SUPPORT
-	ion_drv_create_FB_heap(mtkfb_get_fb_base(), DISP_GetFBRamSize());
-	pr_info("%s DISP_GetFBRamSize size:%d\n",
-		__func__, DISP_GetFBRamSize());
+#ifdef MTK_FB_ION_SUPPORT
+	/*ion_drv_create_FB_heap(mtkfb_get_fb_base(), mtkfb_get_fb_size());*/
+#endif
 #endif
 	fbdev->state = MTKFB_ACTIVE;
 

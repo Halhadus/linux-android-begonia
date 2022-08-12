@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -28,6 +28,9 @@ enum adc_channel {
 	ADC_CHANNEL_TEMP_JC,
 	ADC_CHANNEL_USBID,
 	ADC_CHANNEL_TS,
+	ADC_CHANNEL_TBAT,
+	ADC_CHANNEL_VOUT,
+	ADC_CHANNEL_MAX,
 };
 
 struct charger_properties {
@@ -119,6 +122,17 @@ struct charger_ops {
 	int (*kick_direct_charging_wdt)(struct charger_device *dev);
 	int (*set_direct_charging_ibusoc)(struct charger_device *dev, u32 uA);
 	int (*set_direct_charging_vbusov)(struct charger_device *dev, u32 uV);
+	int (*set_direct_charging_ibatoc)(struct charger_device *dev, u32 uA);
+	int (*set_direct_charging_vbatov)(struct charger_device *dev, u32 uV);
+	int (*set_direct_charging_vbatov_alarm)(struct charger_device *dev,
+						u32 uV);
+	int (*reset_direct_charging_vbatov_alarm)(struct charger_device *dev);
+	int (*set_direct_charging_vbusov_alarm)(struct charger_device *dev,
+						u32 uV);
+	int (*reset_direct_charging_vbusov_alarm)(struct charger_device *dev);
+	int (*is_direct_charging_vbuslowerr)(struct charger_device *dev,
+					     bool *err);
+	int (*init_direct_charging_chip)(struct charger_device *dev);
 
 	/* OTG */
 	int (*enable_otg)(struct charger_device *dev, bool en);
@@ -127,12 +141,15 @@ struct charger_ops {
 
 	/* charger type detection */
 	int (*enable_chg_type_det)(struct charger_device *dev, bool en);
+	int (*rerun_apsd)(struct charger_device *dev, bool en);
+
+	/* hvdcp detection control */
+	int (*enable_hvdcp_det)(struct charger_device *dev, bool en);
 
 	/* HVDCP type detection */
 	int (*get_hvdcp_type)(struct charger_device *dev, u32 *type);
 	int (*get_hvdcp_dpdm_status)(struct charger_device *dev, bool *status);
 	int (*set_hvdcp_dpdm)(struct charger_device *dev);
-	int (*enable_hvdcp_det)(struct charger_device *dev, bool enable);
 	int (*check_hv_charging)(struct charger_device *dev);
 
 	/* run AICL */
@@ -149,6 +166,8 @@ struct charger_ops {
 
 	int (*get_adc)(struct charger_device *dev, enum adc_channel chan,
 		       int *min, int *max);
+	int (*get_adc_accuracy)(struct charger_device *dev,
+				enum adc_channel chan, int *min, int *max);
 	int (*get_vbus_adc)(struct charger_device *dev, u32 *vbus);
 	int (*get_ibus_adc)(struct charger_device *dev, u32 *ibus);
 	int (*get_ibat_adc)(struct charger_device *dev, u32 *ibat);
@@ -164,6 +183,9 @@ struct charger_ops {
 	int (*enable_force_typec_otp)(struct charger_device *dev, bool en);
 	int (*enable_hidden_mode)(struct charger_device *dev, bool en);
 	int (*get_ctd_dischg_status)(struct charger_device *dev, u8 *status);
+	int (*enable_hz)(struct charger_device *dev, bool en);
+
+	int (*enable_bleed_discharge)(struct charger_device *dev, bool en);
 };
 
 static inline void *charger_dev_get_drvdata(
@@ -247,14 +269,16 @@ extern int charger_dev_enable_safety_timer(
 	struct charger_device *charger_dev, bool en);
 extern int charger_dev_enable_chg_type_det(
 	struct charger_device *charger_dev, bool en);
+extern int charger_dev_rerun_apsd(
+	struct charger_device *charger_dev, bool en);
+extern int charger_dev_enable_hvdcp_det(
+	struct charger_device *charger_dev, bool en);
 extern int charger_dev_get_hvdcp_type(
 	struct charger_device *chg_dev, u32 *type);
 extern int charger_dev_get_hvdcp_dpdm_status(
 	struct charger_device *chg_dev, bool *status);
 extern int charger_dev_set_hvdcp_dpdm(
 	struct charger_device *chg_dev);
-extern int charger_dev_enable_hvdcp_det(
-	struct charger_device *chg_dev, bool enable);
 extern int charger_dev_check_hv_charging(
 	struct charger_device *chg_dev);
 extern int charger_dev_enable_otg(
@@ -271,6 +295,8 @@ extern int charger_dev_reset_eoc_state(
 	struct charger_device *charger_dev);
 extern int charger_dev_safety_check(
 	struct charger_device *charger_dev, u32 polling_ieoc);
+extern int charger_dev_enable_hz(
+	struct charger_device *charger_dev, bool en);
 
 /* PE+/PE+2.0 */
 extern int charger_dev_send_ta_current_pattern(
@@ -295,6 +321,8 @@ extern int charger_dev_kick_direct_charging_wdt(
 	struct charger_device *charger_dev);
 extern int charger_dev_get_adc(struct charger_device *charger_dev,
 	enum adc_channel chan, int *min, int *max);
+extern int charger_dev_get_adc_accuracy(struct charger_device *charger_dev,
+	enum adc_channel chan, int *min, int *max);
 /* Prefer use charger_dev_get_adc api */
 extern int charger_dev_get_vbus(
 	struct charger_device *charger_dev, u32 *vbus);
@@ -309,6 +337,22 @@ extern int charger_dev_set_direct_charging_ibusoc(
 	struct charger_device *charger_dev, u32 ua);
 extern int charger_dev_set_direct_charging_vbusov(
 	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_set_direct_charging_ibatoc(
+	struct charger_device *charger_dev, u32 ua);
+extern int charger_dev_set_direct_charging_vbatov(
+	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_set_direct_charging_vbatov_alarm(
+	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_reset_direct_charging_vbatov_alarm(
+	struct charger_device *charger_dev);
+extern int charger_dev_set_direct_charging_vbusov_alarm(
+	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_reset_direct_charging_vbusov_alarm(
+	struct charger_device *charger_dev);
+extern int charger_dev_is_direct_charging_vbuslowerr(
+	struct charger_device *charger_dev, bool *err);
+extern int charger_dev_init_direct_charging_chip(
+	struct charger_device *charger_dev);
 
 /* TypeC */
 extern int charger_dev_enable_usbid(struct charger_device *dev, bool en);
@@ -321,6 +365,9 @@ extern int charger_dev_enable_force_typec_otp(struct charger_device *dev,
 					      bool en);
 extern int charger_dev_get_ctd_dischg_status(struct charger_device *dev,
 					     u8 *status);
+
+extern int charger_dev_enable_bleed_discharge(struct charger_device *dev,
+					      bool en);
 
 /* For buck1 FPWM */
 extern int charger_dev_enable_hidden_mode(struct charger_device *dev, bool en);

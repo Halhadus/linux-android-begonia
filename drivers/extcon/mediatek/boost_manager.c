@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -118,10 +118,10 @@ int usb_otg_set_vbus(int is_on)
 
 #if CONFIG_MTK_GAUGE_VERSION == 30
 	if (is_on) {
-		charger_dev_enable_otg(g_info->primary_charger, true);
 		charger_dev_enable_otg(g_info->secondary_charger, true);
+		charger_dev_enable_otg(g_info->primary_charger, true);
 		charger_dev_set_boost_current_limit(g_info->primary_charger,
-			1500000);
+			1800000);
 		charger_dev_kick_wdt(g_info->primary_charger);
 		enable_boost_polling(true);
 	} else {
@@ -181,6 +181,7 @@ static int usbotg_boost_probe(struct platform_device *pdev)
 		pr_info("%s: get secondary charger device failed\n", __func__);
 		return -ENODEV;
 	}
+
 #if CONFIG_MTK_GAUGE_VERSION == 30
 	alarm_init(&info->otg_timer, ALARM_BOOTTIME,
 		usbotg_alarm_timer_func);

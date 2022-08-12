@@ -1,7 +1,7 @@
 /* internal.h: mm/ internal definitions
  *
  * Copyright (C) 2004 Red Hat, Inc. All Rights Reserved.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Written by David Howells (dhowells@redhat.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -475,6 +475,16 @@ static inline void mminit_validate_memmodel_limits(unsigned long *start_pfn,
 #define NODE_RECLAIM_FULL	-1
 #define NODE_RECLAIM_SOME	0
 #define NODE_RECLAIM_SUCCESS	1
+
+#ifdef CONFIG_NUMA
+extern int node_reclaim(struct pglist_data *, gfp_t, unsigned int);
+#else
+static inline int node_reclaim(struct pglist_data *pgdat, gfp_t mask,
+				unsigned int order)
+{
+	return NODE_RECLAIM_NOSCAN;
+}
+#endif
 
 extern int hwpoison_filter(struct page *p);
 

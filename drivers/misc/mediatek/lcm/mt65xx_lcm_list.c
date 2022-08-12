@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -66,6 +66,10 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 
 #if defined(VVX10F008B00_WUXGA_DSI_VDO)
 	&vvx10f008b00_wuxga_dsi_vdo_lcm_drv,
+#endif
+
+#if defined(FT8719_FHDP_DSI_VDO_XINLI)
+    &ft8719_fhdp_dsi_vdo_xinli_lcm_drv,
 #endif
 
 #if defined(KD070D5450NHA6_RGB_DPI)
@@ -887,10 +891,6 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 	&otm1906a_fhd_dsi_cmd_auto_lcm_drv,
 #endif
 
-#if defined(NT35532_FHD_DSI_VDO_SHARP)
-	&nt35532_fhd_dsi_vdo_sharp_lcm_drv,
-#endif
-
 #if defined(CLAP070WP03XG_LVDS)
 	&clap070wp03xg_lvds_lcm_drv,
 #endif
@@ -1134,6 +1134,10 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 	&ili9881c_hdp_dsi_vdo_ilitek_rt5081_lcm_drv,
 #endif
 
+#if defined(ILI9881C_HD720_TD_TCHD5031_6B_DSI_VDO)
+	&ili9881c_hd720_td_tchd5031_6b_dsi_vdo_lcm_drv,
+#endif
+
 #if defined(NT51021_WUXGA_DSI_VDO_MT8173)
 	&nt51021_wuxga_dsi_vdo_mt8173_lcm_drv,
 #endif
@@ -1169,6 +1173,10 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 
 #if defined(HX83112B_FHDP_DSI_CMD_AUO_RT5081_HDP)
 	&hx83112b_fhdp_dsi_cmd_auo_rt5081_hdp_lcm_drv,
+#endif
+
+#if defined(HX83112B_FHDP_DSI_CMD_AUO_RT5081_HDP_1560)
+	&hx83112b_fhdp_dsi_cmd_auo_rt5081_hdp_1560_lcm_drv,
 #endif
 
 #if defined(HX83112B_FHDP_DSI_VDO_AUO_RT5081_HDP)
@@ -1207,6 +1215,20 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 #if defined(OTM1911A_FHDP_DSI_VDO_HDP_TRULY_RT4801)
 	&otm1911a_fhdp_dsi_vdo_hdp_truly_rt4801_lcm_drv,
 #endif
+
+/*6768 OTM*/
+#if defined(OTM1911A_FHDP_DSI_VDO_TRULY_RT5081)
+	&otm1911a_fhdp_dsi_vdo_truly_rt5081_lcm_drv,
+#endif
+
+#if defined(OTM1911A_FHDP_DSI_VDO_TRULY_RT5081_HDP)
+	&otm1911a_fhdp_dsi_vdo_truly_rt5081_hdp_lcm_drv,
+#endif
+
+#if defined(OTM1911A_FHDP_DSI_VDO_TRULY_RT5081_HDP_1560)
+	&otm1911a_fhdp_dsi_vdo_truly_rt5081_hdp_1560_lcm_drv,
+#endif
+
 #if defined(TD4320_FHDP_DSI_VDO_AUO_RT4801)
 	&td4320_fhdp_dsi_vdo_auo_rt4801_lcm_drv,
 #endif
@@ -1224,12 +1246,24 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 	&nt36672a_fhdp_dsi_vdo_auo_cphy_lcm_drv,
 #endif
 
-#if defined(OTM1287_WXGA_DSI_VDO_AUO_GUOXIAN)
-	&otm1287_wxga_dsi_vdo_auo_guoxian_lcm_drv,
+#if defined(NT36672C_FHDP_DSI_VDO_AUO_CPHY)
+	&nt36672c_fhdp_dsi_vdo_auo_cphy_lcm_drv,
 #endif
 
-#if defined(NT35532_FHD_DSI_VDO_SHARP)
-	&nt35532_fhd_dsi_vdo_sharp_lcm_drv,
+#if defined(NT36672C_FHDP_DSI_VDO_AUO_CPHY_90HZ_JDI)
+	&nt36672c_fhdp_dsi_vdo_auo_cphy_90hz_jdi_lcm_drv,
+#endif
+
+#if defined(NT36672C_FHDP_DSI_VDO_AUO_CPHY_90HZ_TIANMA)
+	&nt36672c_fhdp_dsi_vdo_auo_cphy_90hz_tianma_lcm_drv,
+#endif
+
+#if defined(NT36672C_FHDP_DSI_VDO_AUO_CPHY_90HZ)
+	&nt36672c_fhdp_dsi_vdo_auo_cphy_90hz_lcm_drv,
+#endif
+
+#if defined(OTM1287_WXGA_DSI_VDO_AUO_GUOXIAN)
+	&otm1287_wxga_dsi_vdo_auo_guoxian_lcm_drv,
 #endif
 
 #if defined(OTM1901A_FHD_DSI_VDO_TPV)
@@ -1238,6 +1272,34 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 
 #if defined(R63350A_FHD_DSI_VDO_TRULY)
 	&r63350a_fhd_dsi_vdo_truly_lcm_drv,
+#endif
+
+#if defined(NT35532_FHD_DSI_VDO_SHARP)
+	&nt35532_fhd_dsi_vdo_sharp_lcm_drv,
+#endif
+
+#if defined(TD4320_FHDP_DSI_VDO_AUO_RT5081)
+	&td4320_fhdp_dsi_vdo_auo_rt5081_lcm_drv,
+#endif
+
+#if defined(TD4330_FHDP_DSI_CMD_AUO_RT5081)
+	&td4330_fhdp_dsi_cmd_auo_rt5081_lcm_drv,
+#endif
+
+#if defined(TD4330_FHDP_DSI_VDO_AUO_RT5081)
+	&td4330_fhdp_dsi_vdo_auo_rt5081_lcm_drv,
+#endif
+
+#if defined(NT51021H_WUXGA_VDO_ONCELL_BOE)
+	&nt51021h_wuxga_vdo_oncell_boe_lcm_drv,
+#endif
+
+#if defined(FT8201_WUXGA_DSI_VDO_BOE)
+	&ft8201_wuxga_dsi_vdo_boe_lcm_drv,
+#endif
+
+#if defined(FT8756_FHDP_DSI_VDO_AUO_RT4801)
+	&ft8756_fhdp_dsi_vdo_auo_rt4801_lcm_drv,
 #endif
 
 #if defined(TIANMA_FHD_NT36672A_DSI_VDO)
@@ -1250,14 +1312,6 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 
 #if defined(EBBG_FHD_FT8719_DSI_VDO)
 	&ebbg_fhd_ft8719_dsi_vdo_lcm_drv,
-#endif
-
-#if defined(TD4320_FHDP_DSI_VDO_AUO_RT5081)
-	&td4320_fhdp_dsi_vdo_auo_rt5081_lcm_drv,
-#endif
-
-#if defined(NT51021H_WUXGA_VDO_ONCELL_BOE)
-	&nt51021h_wuxga_vdo_oncell_boe_lcm_drv,
 #endif
 };
 

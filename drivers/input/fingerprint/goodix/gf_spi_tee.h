@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013-2016, Shenzhen Huiding Technology Co., Ltd.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * All Rights Reserved.
  */
 #ifndef __GF_SPI_TEE_H
@@ -25,11 +25,11 @@
 #define DEBUG_LOG (2)
 
 /* debug log setting */
-u8 g_debug_level = DEBUG_LOG;
+u8 g_debug_level = INFO_LOG;
 
 #define gf_debug(level, fmt, args...) do { \
 			if (g_debug_level >= level) {\
-				pr_warn("[gf] " fmt, ##args); \
+				pr_warn("[goodixFP] " fmt, ##args); \
 			} \
 		} while (0)
 

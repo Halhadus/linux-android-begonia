@@ -3,6 +3,7 @@
  * f2fs debugging statistics
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *             http://www.samsung.com/
  * Copyright (c) 2012 Linux Foundation
  * Copyright (c) 2012 Greg Kroah-Hartman <gregkh@linuxfoundation.org>
@@ -11,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/backing-dev.h>
 #include <linux/f2fs_fs.h>
+#include <linux/proc_fs.h>
 #include <linux/blkdev.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
@@ -21,17 +23,79 @@
 #include "gc.h"
 
 static LIST_HEAD(f2fs_stat_list);
-static struct dentry *f2fs_debugfs_root;
 static DEFINE_MUTEX(f2fs_stat_mutex);
+#ifdef CONFIG_DEBUG_FS
+static struct dentry *f2fs_debugfs_root;
+#endif
+extern struct proc_dir_entry *f2fs_proc_root;
+
+/*
+ * This function calculates BDF of every segments
+ */
+void f2fs_update_sit_info(struct f2fs_sb_info *sbi)
+{
+	struct f2fs_stat_info *si = F2FS_STAT(sbi);
+	unsigned long long blks_per_sec, hblks_per_sec, total_vblocks;
+	unsigned long long bimodal, dist;
+	unsigned int segno, vblocks;
+	int ndirty = 0;
+
+	bimodal = 0;
+	total_vblocks = 0;
+	blks_per_sec = BLKS_PER_SEC(sbi);
+	hblks_per_sec = blks_per_sec / 2;
+	for (segno = 0; segno < MAIN_SEGS(sbi); segno += sbi->segs_per_sec) {
+		vblocks = get_valid_blocks(sbi, segno, true);
+		dist = abs(vblocks - hblks_per_sec);
+		bimodal += dist * dist;
+
+		if (vblocks > 0 && vblocks < blks_per_sec) {
+			total_vblocks += vblocks;
+			ndirty++;
+		}
+	}
+	dist = div_u64(MAIN_SECS(sbi) * hblks_per_sec * hblks_per_sec, 100);
+	si->bimodal = div64_u64(bimodal, dist);
+	if (si->dirty_count)
+		si->avg_vblocks = div_u64(total_vblocks, ndirty);
+	else
+		si->avg_vblocks = 0;
+}
+
+const char *f2fs_cp_reasons[NR_CP_REASON_TYPE] = {
+	"no needed",
+	"non regular",
+	"compressed",
+	"hardlink",
+	"sb needs cp",
+	"wrong pino",
+	"no space roll forward",
+	"node needs cp",
+	"fastboot mode",
+	"log type is 2",
+	"dir needs recovery",
+	"parent dir xattr set",
+};
 
 static void update_general_status(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_stat_info *si = F2FS_STAT(sbi);
+	struct f2fs_super_block *raw_super = F2FS_RAW_SUPER(sbi);
 	int i;
+
+	/* these will be changed if online resize is done */
+	si->main_area_segs = le32_to_cpu(raw_super->segment_count_main);
+	si->main_area_sections = le32_to_cpu(raw_super->section_count);
+	si->main_area_zones = si->main_area_sections /
+				le32_to_cpu(raw_super->secs_per_zone);
 
 	/* validation check of the segment numbers */
 	si->hit_largest = atomic64_read(&sbi->read_hit_largest);
 	si->hit_cached = atomic64_read(&sbi->read_hit_cached);
+	si->sync_file_total = atomic64_read(&sbi->sync_file_count);
+	for (i = 0; i < NR_CP_REASON_TYPE; i++)
+		si->cp_reason_total[i] = atomic64_read(&sbi->cp_reason_count[i]);
+
 	si->hit_rbtree = atomic64_read(&sbi->read_hit_rbtree);
 	si->hit_total = si->hit_largest + si->hit_cached + si->hit_rbtree;
 	si->total_ext = atomic64_read(&sbi->total_hit_ext);
@@ -49,7 +113,7 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 	si->nquota_files = sbi->nquota_files;
 	si->ndirty_all = sbi->ndirty_inode[DIRTY_META];
 	si->inmem_pages = get_pages(sbi, F2FS_INMEM_PAGES);
-	si->aw_cnt = atomic_read(&sbi->aw_cnt);
+	si->aw_cnt = sbi->atomic_files;
 	si->vw_cnt = atomic_read(&sbi->vw_cnt);
 	si->max_aw_cnt = atomic_read(&sbi->max_aw_cnt);
 	si->max_vw_cnt = atomic_read(&sbi->max_vw_cnt);
@@ -60,7 +124,7 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 	si->nr_rd_data = get_pages(sbi, F2FS_RD_DATA);
 	si->nr_rd_node = get_pages(sbi, F2FS_RD_NODE);
 	si->nr_rd_meta = get_pages(sbi, F2FS_RD_META);
-	if (SM_I(sbi) && SM_I(sbi)->fcc_info) {
+	if (SM_I(sbi)->fcc_info) {
 		si->nr_flushed =
 			atomic_read(&SM_I(sbi)->fcc_info->issued_flush);
 		si->nr_flushing =
@@ -68,7 +132,7 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 		si->flush_list_empty =
 			llist_empty(&SM_I(sbi)->fcc_info->issue_list);
 	}
-	if (SM_I(sbi) && SM_I(sbi)->dcc_info) {
+	if (SM_I(sbi)->dcc_info) {
 		si->nr_discarded =
 			atomic_read(&SM_I(sbi)->dcc_info->issued_discard);
 		si->nr_discarding =
@@ -87,6 +151,8 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 	si->inline_xattr = atomic_read(&sbi->inline_xattr);
 	si->inline_inode = atomic_read(&sbi->inline_inode);
 	si->inline_dir = atomic_read(&sbi->inline_dir);
+	si->compr_inode = atomic_read(&sbi->compr_inode);
+	si->compr_blocks = atomic_read(&sbi->compr_blocks);
 	si->append = sbi->im[APPEND_INO].ino_num;
 	si->update = sbi->im[UPDATE_INO].ino_num;
 	si->orphans = sbi->im[ORPHAN_INO].ino_num;
@@ -107,7 +173,7 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 	si->free_nids = NM_I(sbi)->nid_cnt[FREE_NID];
 	si->avail_nids = NM_I(sbi)->available_nids;
 	si->alloc_nids = NM_I(sbi)->nid_cnt[PREALLOC_NID];
-	si->bg_gc = sbi->bg_gc;
+	si->gc_booster = sbi->gc_booster;
 	si->io_skip_bggc = sbi->io_skip_bggc;
 	si->other_skip_bggc = sbi->other_skip_bggc;
 	si->skipped_atomic_files[BG_GC] = sbi->skipped_atomic_files[BG_GC];
@@ -136,39 +202,6 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 	}
 
 	si->inplace_count = atomic_read(&sbi->inplace_count);
-}
-
-/*
- * This function calculates BDF of every segments
- */
-static void update_sit_info(struct f2fs_sb_info *sbi)
-{
-	struct f2fs_stat_info *si = F2FS_STAT(sbi);
-	unsigned long long blks_per_sec, hblks_per_sec, total_vblocks;
-	unsigned long long bimodal, dist;
-	unsigned int segno, vblocks;
-	int ndirty = 0;
-
-	bimodal = 0;
-	total_vblocks = 0;
-	blks_per_sec = BLKS_PER_SEC(sbi);
-	hblks_per_sec = blks_per_sec / 2;
-	for (segno = 0; segno < MAIN_SEGS(sbi); segno += sbi->segs_per_sec) {
-		vblocks = get_valid_blocks(sbi, segno, true);
-		dist = abs(vblocks - hblks_per_sec);
-		bimodal += dist * dist;
-
-		if (vblocks > 0 && vblocks < blks_per_sec) {
-			total_vblocks += vblocks;
-			ndirty++;
-		}
-	}
-	dist = div_u64(MAIN_SECS(sbi) * hblks_per_sec * hblks_per_sec, 100);
-	si->bimodal = div64_u64(bimodal, dist);
-	if (si->dirty_count)
-		si->avg_vblocks = div_u64(total_vblocks, ndirty);
-	else
-		si->avg_vblocks = 0;
 }
 
 /*
@@ -290,6 +323,9 @@ static int stat_show(struct seq_file *s, void *v)
 			   si->ssa_area_segs, si->main_area_segs);
 		seq_printf(s, "(OverProv:%d Resv:%d)]\n\n",
 			   si->overp_segs, si->rsvd_segs);
+		seq_printf(s, "Current Time Sec: %llu / Mounted Time Sec: %llu\n\n",
+					ktime_get_boottime_seconds(),
+					SIT_I(si->sbi)->mounted_time);
 		if (test_opt(si->sbi, DISCARD))
 			seq_printf(s, "Utilization: %u%% (%u valid blocks, %u discard blocks)\n",
 				si->utilization, si->valid_count, si->discard_blks);
@@ -308,6 +344,8 @@ static int stat_show(struct seq_file *s, void *v)
 			   si->inline_inode);
 		seq_printf(s, "  - Inline_dentry Inode: %u\n",
 			   si->inline_dir);
+		seq_printf(s, "  - Compressed Inode: %u, Blocks: %u\n",
+			   si->compr_inode, si->compr_blocks);
 		seq_printf(s, "  - Orphan/Append/Update Inode: %u, %u, %u\n",
 			   si->orphans, si->append, si->update);
 		seq_printf(s, "\nMain area: %d segs, %d secs %d zones\n",
@@ -343,6 +381,11 @@ static int stat_show(struct seq_file *s, void *v)
 			   si->dirty_count);
 		seq_printf(s, "  - Prefree: %d\n  - Free: %d (%d)\n\n",
 			   si->prefree_count, si->free_segs, si->free_secs);
+		seq_printf(s, "sync_file calls: %llu\n", si->sync_file_total);
+		seq_printf(s, "  - %-25s%-10s\n", "cp reason", "counts");
+		for (i = 0; i < NR_CP_REASON_TYPE; i++)
+			if (si->cp_reason_total[i])
+				seq_printf(s, "  - %-25s%-10llu\n", f2fs_cp_reasons[i], si->cp_reason_total[i]);
 		seq_printf(s, "CP calls: %d (BG: %d)\n",
 				si->cp_count, si->bg_cp_count);
 		seq_printf(s, "  - cp blocks : %u\n", si->meta_count[META_CP]);
@@ -352,8 +395,8 @@ static int stat_show(struct seq_file *s, void *v)
 				si->meta_count[META_NAT]);
 		seq_printf(s, "  - ssa blocks : %u\n",
 				si->meta_count[META_SSA]);
-		seq_printf(s, "GC calls: %d (BG: %d)\n",
-			   si->call_count, si->bg_gc);
+		seq_printf(s, "GC calls: %d (BG: %d) (Boost: %d)\n",
+			   si->call_count, si->bg_gc, si->gc_booster);
 		seq_printf(s, "  - data segments : %d (%d)\n",
 				si->data_segs, si->bg_data_segs);
 		seq_printf(s, "  - node segments : %d (%d)\n",
@@ -434,7 +477,7 @@ static int stat_show(struct seq_file *s, void *v)
 			   si->block_count[LFS], si->segment_count[LFS]);
 
 		/* segment usage info */
-		update_sit_info(si->sbi);
+		f2fs_update_sit_info(si->sbi);
 		seq_printf(s, "\nBDF: %u, avg. vblocks: %u\n",
 			   si->bimodal, si->avg_vblocks);
 
@@ -491,15 +534,19 @@ int f2fs_build_stats(struct f2fs_sb_info *sbi)
 	atomic64_set(&sbi->read_hit_rbtree, 0);
 	atomic64_set(&sbi->read_hit_largest, 0);
 	atomic64_set(&sbi->read_hit_cached, 0);
+	atomic64_set(&sbi->sync_file_count, 0);
+	for (i = 0; i < NR_CP_REASON_TYPE; i++)
+		atomic64_set(&sbi->cp_reason_count[i], 0);
 
 	atomic_set(&sbi->inline_xattr, 0);
 	atomic_set(&sbi->inline_inode, 0);
 	atomic_set(&sbi->inline_dir, 0);
+	atomic_set(&sbi->compr_inode, 0);
+	atomic_set(&sbi->compr_blocks, 0);
 	atomic_set(&sbi->inplace_count, 0);
 	for (i = META_CP; i < META_MAX; i++)
 		atomic_set(&sbi->meta_count[i], 0);
 
-	atomic_set(&sbi->aw_cnt, 0);
 	atomic_set(&sbi->vw_cnt, 0);
 	atomic_set(&sbi->max_aw_cnt, 0);
 	atomic_set(&sbi->max_vw_cnt, 0);
@@ -524,14 +571,24 @@ void f2fs_destroy_stats(struct f2fs_sb_info *sbi)
 
 void __init f2fs_create_root_stats(void)
 {
+#ifdef CONFIG_DEBUG_FS
 	f2fs_debugfs_root = debugfs_create_dir("f2fs", NULL);
 
 	debugfs_create_file("status", S_IRUGO, f2fs_debugfs_root, NULL,
 			    &stat_fops);
+#endif
+	if (f2fs_proc_root)
+		proc_create_data("status", S_IRUGO, f2fs_proc_root,
+				&stat_fops, NULL);
 }
 
 void f2fs_destroy_root_stats(void)
 {
+	if (f2fs_proc_root)
+		remove_proc_entry("status", f2fs_proc_root);
+
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(f2fs_debugfs_root);
 	f2fs_debugfs_root = NULL;
+#endif
 }

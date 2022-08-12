@@ -3,7 +3,6 @@
  *  Driver for MT6360 PMU RGBLed part
  *
  *  Copyright (C) 2018 Mediatek Technology Inc.
- *  Copyright (C) 2020 XiaoMi, Inc.
  *  cy_huang <cy_huang@richtek.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -955,7 +954,6 @@ static void mt6360_led_bright_set(
 		reg_mask = 0x1f;
 		break;
 	}
-
 	if (bright && led_index == MT6360_LED_1)
 		cur_level = (bright & reg_mask)- 1;
 	else
@@ -963,7 +961,6 @@ static void mt6360_led_bright_set(
 
 	ret = mt6360_pmu_reg_update_bits(rgbled_info->mpi, reg_addr,
 			reg_mask, cur_level << reg_shift);
-
 	if (ret < 0) {
 		dev_err(led->dev, "update brightness fail\n");
 		return;

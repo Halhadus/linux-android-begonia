@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -41,6 +41,8 @@ enum {
 	SLAVE_CHARGER = 1,
 	TOTAL_CHARGER = 2,
 	DIRECT_CHARGER = 10,
+	MAIN_DIVIDER_CHARGER = 20,
+	SLAVE_DIVIDER_CHARGER = 21,
 };
 
 struct charger_consumer {
@@ -100,6 +102,10 @@ extern int unregister_charger_manager_notifier(
 extern int charger_manager_enable_high_voltage_charging(
 	struct charger_consumer *consumer,
 	bool en);
+extern int charger_manager_enable_otg(
+	struct charger_consumer *consumer,
+	int idx,
+	bool en);
 extern int charger_manager_enable_power_path(
 	struct charger_consumer *consumer,
 	int idx,
@@ -116,14 +122,12 @@ extern int charger_manager_enable_chg_type_det(
 	struct charger_consumer *consumer,
 	bool en);
 extern int charger_manager_get_ibus(int* ibus);
+extern int charger_manager_set_charging_enable_all(bool enable);
 extern int charger_manager_set_input_suspend(int suspend);
 extern int charger_manager_is_input_suspend(void);
 extern int charger_manager_get_prop_system_temp_level(void);
 extern int charger_manager_get_prop_system_temp_level_max(void);
 extern void charger_manager_set_prop_system_temp_level(int temp_level);
-
-
-
 extern int charger_manager_check_ra_detected(void);
 extern void charger_manager_set_ra_detected(int val);
 extern int charger_manager_pd_is_online(void);
@@ -134,5 +138,5 @@ extern int mtk_chr_is_charger_exist(unsigned char *exist);
 extern bool is_power_path_supported(void);
 extern int charger_get_vbus(void);
 extern bool mt_charger_plugin(void);
-
+extern int charger_manager_pd_is_online(void);
 #endif /* __MTK_CHARGER_H__ */

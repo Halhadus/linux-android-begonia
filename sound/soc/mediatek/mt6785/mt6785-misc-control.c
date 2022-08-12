@@ -40,7 +40,7 @@ static const char * const mt6785_sgen_mode_str[] = {
 	"OFF",    "O3",     "O4",
 };
 
-static const int mt6785_sgen_mode_idx[] = {
+static const int const mt6785_sgen_mode_idx[] = {
 	0, 1, 2, 3,
 	4, 5, 6, 7,
 	8, 9, 10, 11,
@@ -65,7 +65,7 @@ static const char * const mt6785_sgen_rate_str[] = {
 	"192k"
 };
 
-static const int mt6785_sgen_rate_idx[] = {
+static const int const mt6785_sgen_rate_idx[] = {
 	0, 1, 2, 4,
 	5, 6, 8, 9,
 	10, 11, 12, 13,
@@ -1714,8 +1714,6 @@ static int speech_property_get(struct snd_kcontrol *kcontrol,
 	}
 	ucontrol->value.integer.value[0] = *sph_property;
 
-	dev_info(afe->dev, "%s(), %s = 0x%x\n", __func__,
-		 kcontrol->id.name, *sph_property);
 	return 0;
 }
 
@@ -1735,8 +1733,6 @@ static int speech_property_set(struct snd_kcontrol *kcontrol,
 	}
 	*sph_property = ucontrol->value.integer.value[0];
 
-	dev_info(afe->dev, "%s(), %s = 0x%x\n", __func__,
-		 kcontrol->id.name, *sph_property);
 	return 0;
 }
 

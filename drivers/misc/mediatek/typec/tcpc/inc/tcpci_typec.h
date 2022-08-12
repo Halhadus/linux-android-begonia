@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
- * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -58,10 +57,6 @@ extern int tcpc_typec_swap_role(struct tcpc_device *tcpc_dev);
 #ifdef CONFIG_WATER_DETECTION
 extern int tcpc_typec_handle_wd(struct tcpc_device *tcpc_dev, bool wd);
 #endif /* CONFIG_WATER_DETECTION */
-
-#ifdef CONFIG_TYPEC_OTP
-extern int tcpc_typec_handle_otp(struct tcpc_device *tcpc_dev, bool otp);
-#endif /* CONFIG_TYPEC_OTP */
 
 #ifdef CONFIG_CABLE_TYPE_DETECTION
 extern int tcpc_typec_handle_ctd(struct tcpc_device *tcpc_dev,

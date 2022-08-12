@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2016 Xiaomi Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -23,6 +24,7 @@
 #define REGFLAG_END_OF_TABLE    0xFF   /* END OF REGISTERS MARKER */
 
 unsigned char xy_writepoint[16] = {0};
+
 #ifdef CONFIG_BACKLIGHT_SUPPORT_LM36273
 extern int hbm_brightness_set(int level);
 #else

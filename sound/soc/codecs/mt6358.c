@@ -9,7 +9,9 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/delay.h>
+#ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
+#endif
 #include <linux/kthread.h>
 #include <linux/sched.h>
 
@@ -2671,6 +2673,8 @@ static int mt_vow_aud_lpw_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		/* add delay for RC Calibration */
+		usleep_range(1000, 1200);
 		/* Enable audio uplink LPW mode */
 		/* Enable Audio ADC 1st Stage LPW */
 		/* Enable Audio ADC 2nd & 3rd LPW */
@@ -5949,7 +5953,9 @@ static int mtk_calculate_impedance_formula(int pcm_offset, int aux_diff)
 	/* R = V /I */
 	/* V = auxDiff * (1800mv /auxResolution)  /TrimBufGain */
 	/* I =  pcmOffset * DAC_constant * Gsdm * Gibuf */
-	return DIV_ROUND_CLOSEST(3600000 / pcm_offset * aux_diff, 7832);
+	long mul_val = pcm_offset * aux_diff;
+
+	return DIV_ROUND_CLOSEST(3600000 / mul_val, 7832);
 }
 
 static int calculate_impedance(struct mt6358_priv *priv,
@@ -6784,6 +6790,7 @@ static struct snd_soc_codec_driver mt6358_soc_codec_driver = {
 	},
 };
 
+#ifdef CONFIG_DEBUG_FS
 static void debug_write_reg(struct file *file, void *arg)
 {
 	struct mt6358_priv *priv = file->private_data;
@@ -7494,7 +7501,7 @@ static ssize_t mt6358_debugfs_write(struct file *f, const char __user *buf,
 	char *command = NULL;
 	char *str_begin = NULL;
 	char delim[] = " ,";
-	const struct command_function *cf;
+	const struct command_function *cf = NULL;
 
 	if (!count) {
 		dev_info(priv->dev, "%s(), count is 0, return directly\n",
@@ -7541,6 +7548,7 @@ static const struct file_operations mt6358_debugfs_ops = {
 	.write = mt6358_debugfs_write,
 	.read = mt6358_debugfs_read,
 };
+#endif
 
 #ifndef CONFIG_MTK_PMIC_WRAP
 #ifdef CONFIG_MTK_PMIC_WRAP_HAL
@@ -7662,7 +7670,7 @@ static int mt6358_platform_driver_probe(struct platform_device *pdev)
 {
 	struct mt6358_priv *priv;
 #ifdef CONFIG_MTK_PMIC_WRAP
-	struct device_node *pwrap_node;
+	struct device_node *pwrap_node = NULL;
 #endif
 
 	priv = devm_kzalloc(&pdev->dev,
@@ -7693,11 +7701,12 @@ static int mt6358_platform_driver_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->regmap))
 		return PTR_ERR(priv->regmap);
 
+#ifdef CONFIG_DEBUG_FS
 	/* create debugfs file */
 	priv->debugfs = debugfs_create_file("mtksocanaaudio",
 					    S_IFREG | 0444, NULL,
 					    priv, &mt6358_debugfs_ops);
-
+#endif
 	dev_info(priv->dev, "%s(), dev name %s\n",
 		__func__, dev_name(&pdev->dev));
 
@@ -7709,12 +7718,13 @@ static int mt6358_platform_driver_probe(struct platform_device *pdev)
 
 static int mt6358_platform_driver_remove(struct platform_device *pdev)
 {
+#ifdef CONFIG_DEBUG_FS
 	struct mt6358_priv *priv = dev_get_drvdata(&pdev->dev);
 
 	dev_info(&pdev->dev, "%s()\n", __func__);
 
 	debugfs_remove(priv->debugfs);
-
+#endif
 	snd_soc_unregister_codec(&pdev->dev);
 	return 0;
 }

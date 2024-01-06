@@ -184,3 +184,6 @@ KERNEL_ARCH = arm64
 
 # Kernel target to build
 KERNEL_BUILD_TARGET = Image.gz
+
+#Trying something
+DTC_EXT=/usr/bin/dtc

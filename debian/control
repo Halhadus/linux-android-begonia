@@ -1,7 +1,7 @@
 Source: linux-android-xiaomi-begonia
 Section: kernel
 Priority: optional
-Maintainer: Rúben Carneiro <rubencarneiro01@gmail.com>
+Maintainer: Rúben Carneiro <rubencarneiro01@gmail.com>, Halhadus <ananasordeu@gmail.com>
 Uploaders: Eugenio Paolantonio (g7) <eugenio@droidian.org>,
            r3vn <giuseppe@droidian.org>,
            Erfan Abdi <erfan@droidian.org>,

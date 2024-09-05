@@ -25,16 +25,12 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
-          ref: droidian
+          ref: current
           
       - name: Update repositories
         run: |
           apt update
           apt install linux-packaging-snippets -y
-          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r530567.tar.gz -O /clang.tar.gz
-          mkdir /clang
-          tar -xvf /clang.tar.gz -C /clang
-          ln -fs /opt/android/prebuilts/python/2.7.5/bin/python debian/path-override/python
 
       - name: Install package build dependencies
         run: |

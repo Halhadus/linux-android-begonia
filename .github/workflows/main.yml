@@ -50,6 +50,14 @@ jobs:
           cp ../*.deb /out/
           cp ../*.dsc /out/
           cp ../*.tar.xz /out/
+          dpkg-deb -R /out/linux-bootimage-4.14-141-xiaomi-begonia_0.0.0+git20221226134031.a0d7920.trixie_arm64.deb /bootimage
+          cd /bootimage
+          rm boot/dtbo.img-4.14-141-xiaomi-begonia
+          rm boot/recovery.img-4.14-141-xiaomi-begonia
+          find . -type f -not -path "./DEBIAN/*" -exec md5sum {} + | sort -k 2 | sed 's/\.\/\(.*\)/\1/' > DEBIAN/md5sums
+          cd /
+          rm /out/linux-bootimage-4.14-141-xiaomi-begonia_0.0.0+git20221226134031.a0d7920.trixie_arm64.deb
+          dpkg-deb -b /bootimage /out/linux-bootimage-4.14-141-xiaomi-begonia_0.0.0+git20221226134031.a0d7920.trixie_arm64.deb
           ls /out
           
       - name: Upload artifacts

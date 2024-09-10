@@ -25,12 +25,12 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
-          ref: current
+          ref: droidian
           
       - name: Update repositories
         run: |
           apt update
-          apt install linux-packaging-snippets -y
+          apt install linux-packaging-snippets
 
       - name: Install package build dependencies
         run: |
@@ -47,7 +47,9 @@ jobs:
       - name: Move packages to out directory
         run: |
           mkdir /out
-          cp ./out/KERNEL_OBJ/boot*.img /out/
+          cp ../*.deb /out/
+          cp ../*.dsc /out/
+          cp ../*.tar.xz /out/
           ls /out
           
       - name: Upload artifacts
